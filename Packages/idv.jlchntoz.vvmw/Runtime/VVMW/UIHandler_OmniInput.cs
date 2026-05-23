@@ -88,8 +88,10 @@ namespace JLChnToZ.VRC.VVMW {
                     if (Utilities.IsValid(queueListScrollView))
                         SelectedPlayListIndex = handler.PlayListIndex;
                     UpdatePlayList();
-                } else
+                } else {
+                    core._ClearLyricsSource();
                     core.PlayUrl(url, altUrl, selectedPlayer);
+                }
                 _InputCancelClick();
             }
         }

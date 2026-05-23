@@ -140,6 +140,7 @@ namespace JLChnToZ.VRC.VVMW {
                 Array.Copy(localPlayListOrder, 1, newOrderList, 0, newLength);
                 localPlayListOrder = newOrderList;
             }
+            SetCoreLyricsSource(localPlayingIndex, false);
             core.PlayUrl(playListUrls[localPlayingIndex], playListUrlsQuest[localPlayingIndex], playListPlayerIndex[localPlayingIndex]);
             core.SetTitle(playListEntryTitles[localPlayingIndex], playListTitles[localPlayListIndex - 1]);
             RequestSync();

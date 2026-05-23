@@ -141,6 +141,7 @@ namespace JLChnToZ.VRC.VVMW {
             RecordPlaybackHistory(pcUrl, questUrl, index, queuedTitle);
             localCurrentTitle = queuedTitle;
             RequestSync();
+            ClearCoreLyricsSource();
             core.PlayUrl(pcUrl, questUrl, index);
             core._ResetTitle();
         }
@@ -150,6 +151,7 @@ namespace JLChnToZ.VRC.VVMW {
             if (newLength <= 0) {
                 if (!deleteOnly && localPlayingPlaylistIndex == 0 && index < 0 && RepeatAll) {
                     GetLastPlayedUrl(out VRCUrl lastPCUrl, out VRCUrl lastQuestUrl, out byte lastActivePlayer);
+                    ClearCoreLyricsSource();
                     core.PlayUrl(lastPCUrl, lastQuestUrl, lastActivePlayer);
                     core._ResetTitle();
                     RecordPlaybackHistory(lastPCUrl, lastQuestUrl, lastActivePlayer, localCurrentTitle);
@@ -210,6 +212,7 @@ namespace JLChnToZ.VRC.VVMW {
             localQueuedTitles = newTitles;
             if (!deleteOnly) {
                 localCurrentTitle = title;
+                ClearCoreLyricsSource();
                 core.PlayUrl(url, questUrl, playerIndex);
                 core._ResetTitle();
                 RecordPlaybackHistory(url, questUrl, playerIndex, title);

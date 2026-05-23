@@ -255,7 +255,10 @@ namespace JLChnToZ.VRC.VVMW {
         /// Play the default URL.
         /// </summary>
         public void _PlayDefaultUrl() {
-            if (!VRCUrl.IsNullOrEmpty(defaultUrl)) PlayUrl(null, 0);
+            if (!VRCUrl.IsNullOrEmpty(defaultUrl)) {
+                _ClearLyricsSource();
+                PlayUrl(null, 0);
+            }
         }
 
         /// <summary>
@@ -352,6 +355,7 @@ namespace JLChnToZ.VRC.VVMW {
             activeHandler.LoadUrl(url, false);
             if (RequestSync()) state = LOADING;
             LoadYTTL();
+            LoadLRCLIB();
         }
 
         /// <inheritdoc cref="PlayUrl(VRCUrl, VRCUrl, byte)"/>
@@ -573,6 +577,7 @@ namespace JLChnToZ.VRC.VVMW {
             SendEvent("_onVideoReady");
             if (!synced) {
                 activeHandler.Play();
+                StartLyricsLineUpdate();
                 return;
             }
             int intState = state;
@@ -589,6 +594,7 @@ namespace JLChnToZ.VRC.VVMW {
                 default: return;
             }
             if (videoTime > 0) Time = videoTime;
+            StartLyricsLineUpdate();
         }
 
         /// <summary>
@@ -598,6 +604,7 @@ namespace JLChnToZ.VRC.VVMW {
         public override void OnVideoStart() {
             SendEvent("_onVideoStart");
             StartSyncTime();
+            StartLyricsLineUpdate();
         }
 
         /// <summary>
@@ -608,6 +615,7 @@ namespace JLChnToZ.VRC.VVMW {
             SendEvent("OnVideoPlay");
             SetAudioPitch();
             AssignAudioLinkSource();
+            StartLyricsLineUpdate();
             if (!synced || !Networking.IsOwner(gameObject) || isLocalReloading) return;
             state = PLAYING;
             StartSyncTime();
@@ -622,6 +630,7 @@ namespace JLChnToZ.VRC.VVMW {
 #if AUDIOLINK_V1
             SetAudioLinkPlayBackState(MediaPlaying.Paused);
 #endif
+            UpdateLyricsLine();
             if (!synced || !Networking.IsOwner(gameObject) || isLocalReloading) return;
             state = PAUSED;
             StartSyncTime();
@@ -639,6 +648,7 @@ namespace JLChnToZ.VRC.VVMW {
             ActivePlayer = 0;
             localUrl = synced ? null : defaultUrl;
             trustUpdated = false;
+            _ClearLyricsSource();
             SendEvent("_onVideoEnd");
 #if AUDIOLINK_V1
             if (Utilities.IsValid(audioLink)) audioLink.SetMediaPlaying(MediaPlaying.Stopped);
@@ -750,7 +760,10 @@ namespace JLChnToZ.VRC.VVMW {
                 SendEvent("_OnVideoBeginLoad");
             }
             localUrl = url;
-            if (shouldReload) LoadYTTL();
+            if (shouldReload) {
+                LoadYTTL();
+                LoadLRCLIB();
+            }
             if (Utilities.IsValid(activeHandler) && activeHandler.IsReady) {
                 bool forceSyncTime = false;
                 int intState = state;

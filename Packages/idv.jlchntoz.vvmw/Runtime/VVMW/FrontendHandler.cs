@@ -389,9 +389,14 @@ namespace JLChnToZ.VRC.VVMW {
             localCurrentTitle = currentTitle;
             localFlags = flags;
             if (playListIndex > 0) {
-                if (localPlayListIndex != playListIndex || localPlayingIndex != playingIndex)
+                if (localPlayListIndex != playListIndex || localPlayingIndex != playingIndex) {
+                    SetCoreLyricsSource(playingIndex, true);
                     core.SetTitle(playListEntryTitles[playingIndex], playListTitles[playListIndex - 1]);
-            } else core._ResetTitle();
+                }
+            } else {
+                ClearCoreLyricsSource();
+                core._ResetTitle();
+            }
             localPlayListIndex = playListIndex;
             localPlayingIndex = playingIndex;
             core.Loop = RepeatOne;

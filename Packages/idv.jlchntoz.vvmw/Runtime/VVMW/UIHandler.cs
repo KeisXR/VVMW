@@ -24,6 +24,8 @@ namespace JLChnToZ.VRC.VVMW {
         [LocalizedHeader("HEADER:Main_Reference")]
         [SerializeField, BindUdonSharpEvent(
             nameof(_OnPerformerChange),
+            nameof(_OnLyricsData),
+            nameof(_OnLyricsLineChange),
             nameof(_OnRangeLoopChange),
             nameof(_OnScreenSharedPropertiesChanged),
             nameof(_OnSpeedChange),
@@ -255,12 +257,14 @@ namespace JLChnToZ.VRC.VVMW {
             InitPlayQueueList();
             InitPlayerSelect();
             InitABLoopSlider();
+            InitLyricsPanel();
             if (Utilities.IsValid(playNextIndicator)) playNextIndicator.SetActive(false);
             InitShiftControl();
             _OnUIUpdate();
             _OnVolumeChange();
             _OnSyncOffsetChange();
             _OnSpeedChange();
+            _OnLyricsData();
             UpdatePlayerText();
         }
 

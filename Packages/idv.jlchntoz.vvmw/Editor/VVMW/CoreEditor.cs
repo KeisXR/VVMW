@@ -43,6 +43,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         SerializedProperty loopProperty;
         SerializedProperty audioLinkProperty;
         SerializedProperty yttlManagerProperty;
+        SerializedProperty enableLyricsProperty;
+        SerializedProperty lyricsOffsetProperty;
+        SerializedProperty maxSyncedLyricsLinesProperty;
+        SerializedProperty lyricsUpdateIntervalProperty;
         SerializedProperty defaultTextureProperty;
         SerializedProperty screenTargetsProperty;
         SerializedProperty screenTargetModesProperty;
@@ -91,6 +95,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             loopProperty = serializedObject.FindProperty("loop");
             audioLinkProperty = serializedObject.FindProperty("audioLink");
             yttlManagerProperty = serializedObject.FindProperty("yttl");
+            enableLyricsProperty = serializedObject.FindProperty("enableLyrics");
+            lyricsOffsetProperty = serializedObject.FindProperty("lyricsOffset");
+            maxSyncedLyricsLinesProperty = serializedObject.FindProperty("maxSyncedLyricsLines");
+            lyricsUpdateIntervalProperty = serializedObject.FindProperty("lyricsUpdateInterval");
             screenTargetsProperty = serializedObject.FindProperty("screenTargets");
             screenTargetModesProperty = serializedObject.FindProperty("screenTargetModes");
             screenTargetIndecesProperty = serializedObject.FindProperty("screenTargetIndeces");
@@ -229,6 +237,13 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             if (newAudioSource != null) AppendAudioSource(target as Core, newAudioSource, audioSourcesProperty);
             EditorGUILayout.PropertyField(audioLinkProperty);
             EditorGUILayout.PropertyField(yttlManagerProperty);
+            EditorGUILayout.PropertyField(enableLyricsProperty);
+            if (enableLyricsProperty.boolValue)
+                using (new EditorGUI.IndentLevelScope()) {
+                    EditorGUILayout.PropertyField(lyricsOffsetProperty);
+                    EditorGUILayout.PropertyField(maxSyncedLyricsLinesProperty);
+                    EditorGUILayout.PropertyField(lyricsUpdateIntervalProperty);
+                }
             EditorGUILayout.PropertyField(broadcastScreenTextureProperty);
             if (broadcastScreenTextureProperty.boolValue)
                 EditorGUILayout.PropertyField(broadcastScreenTextureNameProperty);

@@ -111,7 +111,10 @@ namespace JLChnToZ.VRC.VVMW {
                 }
                 return;
             }
-            if (Utilities.IsValid(core)) core.PlayUrl(streamLinks[streamIndex], altStreamLinks[streamIndex], (byte)playerIndex);
+            if (Utilities.IsValid(core)) {
+                core._ClearLyricsSource();
+                core.PlayUrl(streamLinks[streamIndex], altStreamLinks[streamIndex], (byte)playerIndex);
+            }
         }
     }
 
