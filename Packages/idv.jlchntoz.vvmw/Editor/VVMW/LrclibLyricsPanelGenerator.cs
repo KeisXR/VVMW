@@ -4,9 +4,20 @@ using UnityEngine;
 using UnityEngine.UI;
 
 namespace JLChnToZ.VRC.VVMW.Editors {
-    static class LrclibLyricsPanelGenerator {
+    public static class LrclibLyricsPanelGenerator {
         const string menuRoot = "GameObject/VizVid/";
-        const string prefabPath = "Packages/idv.jlchntoz.vvmw/Prefabs/UI Elements/Lyrics Panel.prefab";
+        const string fallbackPackageRoot = "Packages/idv.jlchntoz.vvmw";
+        const string prefabRelativePath = "Prefabs/UI Elements/Lyrics Panel.prefab";
+        const string fontRelativePath = "Fonts/Comfortaa-Regular SDF.asset";
+        const float defaultPanelWidth = 1800F;
+        const float defaultPanelHeight = 260F;
+        const float maxPanelWidth = 2200F;
+        const float minPanelWidth = 900F;
+        const float margin = 24F;
+        const float reportButtonWidth = 230F;
+        const float reportButtonHeight = 36F;
+        const float reportButtonMargin = 10F;
+        static TMP_FontAsset fontAsset;
 
         [MenuItem(menuRoot + "Modules/Lyrics Panel", false, 121)]
         static void CreateLyricsPanelInScene() {
@@ -19,8 +30,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         [MenuItem("Tools/VizVid/LRCLIB/Generate Lyrics Panel Prefab")]
-        static void GenerateLyricsPanelPrefab() {
-            EnsureFolder("Packages/idv.jlchntoz.vvmw/Prefabs/UI Elements");
+        public static void GenerateLyricsPanelPrefab() {
+            var prefabPath = GetPackageAssetPath(prefabRelativePath);
+            EnsureFolder(System.IO.Path.GetDirectoryName(prefabPath).Replace('\\', '/'));
             var panel = CreatePanel(null);
             PrefabUtility.SaveAsPrefabAsset(panel, prefabPath);
             Object.DestroyImmediate(panel);
@@ -43,33 +55,31 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             var root = new GameObject("Lyrics Panel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             if (parent != null) GameObjectUtility.SetParentAndAlign(root, parent.gameObject);
             var rect = root.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.1F, 0.02F);
-            rect.anchorMax = new Vector2(0.9F, 0.24F);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
+            ConfigurePanelRect(rect, parent as RectTransform);
             var image = root.GetComponent<Image>();
             image.color = new Color(0, 0, 0, 0.55F);
+            image.raycastTarget = false;
 
             var syncedRoot = CreateChild(root.transform, "Synced Lyrics");
             var syncedRect = syncedRoot.GetComponent<RectTransform>();
             syncedRect.anchorMin = Vector2.zero;
             syncedRect.anchorMax = Vector2.one;
-            syncedRect.offsetMin = new Vector2(16, 40);
-            syncedRect.offsetMax = new Vector2(-16, -12);
-            var previous = CreateText(syncedRoot.transform, "Previous Line", 20, FontStyles.Normal, TextAlignmentOptions.Center, new Color(1, 1, 1, 0.55F));
+            syncedRect.offsetMin = new Vector2(margin, margin);
+            syncedRect.offsetMax = new Vector2(-margin, -(reportButtonHeight + reportButtonMargin + 12F));
+            var previous = CreateText(syncedRoot.transform, "Previous Line", 20, 10, 22, FontStyles.Normal, TextAlignmentOptions.Center, new Color(1, 1, 1, 0.55F));
             SetRect(previous.rectTransform, 0.66F, 1F);
-            var current = CreateText(syncedRoot.transform, "Current Line", 30, FontStyles.Bold, TextAlignmentOptions.Center, Color.white);
-            SetRect(current.rectTransform, 0.30F, 0.70F);
-            var next = CreateText(syncedRoot.transform, "Next Line", 20, FontStyles.Normal, TextAlignmentOptions.Center, new Color(1, 1, 1, 0.55F));
+            var current = CreateText(syncedRoot.transform, "Current Line", 32, 16, 38, FontStyles.Bold, TextAlignmentOptions.Center, Color.white);
+            SetRect(current.rectTransform, 0.28F, 0.72F);
+            var next = CreateText(syncedRoot.transform, "Next Line", 20, 10, 22, FontStyles.Normal, TextAlignmentOptions.Center, new Color(1, 1, 1, 0.55F));
             SetRect(next.rectTransform, 0F, 0.34F);
 
             var plainRoot = CreateChild(root.transform, "Plain Lyrics");
             var plainRect = plainRoot.GetComponent<RectTransform>();
             plainRect.anchorMin = Vector2.zero;
             plainRect.anchorMax = Vector2.one;
-            plainRect.offsetMin = new Vector2(16, 40);
-            plainRect.offsetMax = new Vector2(-16, -12);
-            var plain = CreateText(plainRoot.transform, "Plain Text", 20, FontStyles.Normal, TextAlignmentOptions.TopLeft, Color.white);
+            plainRect.offsetMin = new Vector2(margin, margin);
+            plainRect.offsetMax = new Vector2(-margin, -(reportButtonHeight + reportButtonMargin + 12F));
+            var plain = CreateText(plainRoot.transform, "Plain Text", 18, 10, 22, FontStyles.Normal, TextAlignmentOptions.TopLeft, Color.white);
             plain.enableWordWrapping = true;
             plain.overflowMode = TextOverflowModes.Ellipsis;
             plain.rectTransform.anchorMin = Vector2.zero;
@@ -81,9 +91,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             var statusRect = statusRoot.GetComponent<RectTransform>();
             statusRect.anchorMin = Vector2.zero;
             statusRect.anchorMax = Vector2.one;
-            statusRect.offsetMin = new Vector2(16, 40);
-            statusRect.offsetMax = new Vector2(-16, -12);
-            var status = CreateText(statusRoot.transform, "Status Text", 22, FontStyles.Normal, TextAlignmentOptions.Center, new Color(1, 1, 1, 0.78F));
+            statusRect.offsetMin = new Vector2(margin, margin);
+            statusRect.offsetMax = new Vector2(-margin, -(reportButtonHeight + reportButtonMargin + 12F));
+            var status = CreateText(statusRoot.transform, "Status Text", 22, 12, 26, FontStyles.Normal, TextAlignmentOptions.Center, new Color(1, 1, 1, 0.78F));
             status.rectTransform.anchorMin = Vector2.zero;
             status.rectTransform.anchorMax = Vector2.one;
             status.rectTransform.offsetMin = Vector2.zero;
@@ -95,10 +105,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             reportRect.anchorMin = new Vector2(1F, 1F);
             reportRect.anchorMax = new Vector2(1F, 1F);
             reportRect.pivot = new Vector2(1F, 1F);
-            reportRect.sizeDelta = new Vector2(160, 28);
-            reportRect.anchoredPosition = new Vector2(-8, -8);
+            reportRect.sizeDelta = new Vector2(reportButtonWidth, reportButtonHeight);
+            reportRect.anchoredPosition = new Vector2(-reportButtonMargin, -reportButtonMargin);
             reportObject.GetComponent<Image>().color = new Color(0.16F, 0.16F, 0.16F, 0.9F);
-            var reportText = CreateText(reportObject.transform, "Label", 14, FontStyles.Normal, TextAlignmentOptions.Center, Color.white);
+            var reportText = CreateText(reportObject.transform, "Label", 14, 8, 16, FontStyles.Normal, TextAlignmentOptions.Center, Color.white);
             reportText.rectTransform.anchorMin = Vector2.zero;
             reportText.rectTransform.anchorMax = Vector2.one;
             reportText.rectTransform.offsetMin = new Vector2(8, 2);
@@ -116,17 +126,50 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             return go;
         }
 
-        static TextMeshProUGUI CreateText(Transform parent, string name, int size, FontStyles style, TextAlignmentOptions alignment, Color color) {
+        static TextMeshProUGUI CreateText(Transform parent, string name, int size, int minSize, int maxSize, FontStyles style, TextAlignmentOptions alignment, Color color) {
             var go = new GameObject(name, typeof(RectTransform));
             GameObjectUtility.SetParentAndAlign(go, parent.gameObject);
             var text = go.AddComponent<TextMeshProUGUI>();
+            var font = GetFontAsset();
+            if (font != null) text.font = font;
             text.text = "";
             text.fontSize = size;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = minSize;
+            text.fontSizeMax = maxSize;
             text.fontStyle = style;
             text.alignment = alignment;
             text.color = color;
             text.raycastTarget = false;
+            text.enableWordWrapping = true;
+            text.overflowMode = TextOverflowModes.Ellipsis;
             return text;
+        }
+
+        static TMP_FontAsset GetFontAsset() {
+            if (fontAsset == null)
+                fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(GetPackageAssetPath(fontRelativePath));
+            return fontAsset;
+        }
+
+        static void ConfigurePanelRect(RectTransform rect, RectTransform parentRect) {
+            rect.localScale = Vector3.one;
+            if (parentRect == null) {
+                rect.anchorMin = new Vector2(0.5F, 0.5F);
+                rect.anchorMax = new Vector2(0.5F, 0.5F);
+                rect.pivot = new Vector2(0.5F, 0.5F);
+                rect.anchoredPosition = Vector2.zero;
+                rect.sizeDelta = new Vector2(defaultPanelWidth, defaultPanelHeight);
+                return;
+            }
+
+            float parentWidth = parentRect.rect.width;
+            float panelWidth = parentWidth > 0 ? Mathf.Clamp(parentWidth * 0.78F, minPanelWidth, maxPanelWidth) : defaultPanelWidth;
+            rect.anchorMin = new Vector2(0.5F, 1F);
+            rect.anchorMax = new Vector2(0.5F, 1F);
+            rect.pivot = new Vector2(0.5F, 0F);
+            rect.anchoredPosition = new Vector2(0, 24F);
+            rect.sizeDelta = new Vector2(panelWidth, defaultPanelHeight);
         }
 
         static void SetRect(RectTransform rect, float minY, float maxY) {
@@ -169,6 +212,12 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                     AssetDatabase.CreateFolder(current, parts[i]);
                 current = next;
             }
+        }
+
+        static string GetPackageAssetPath(string relativePath) {
+            var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(LrclibLyricsPanelGenerator).Assembly);
+            var packageRoot = packageInfo != null && !string.IsNullOrEmpty(packageInfo.assetPath) ? packageInfo.assetPath : fallbackPackageRoot;
+            return $"{packageRoot}/{relativePath}";
         }
     }
 }
