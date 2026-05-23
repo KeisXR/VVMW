@@ -1,5 +1,5 @@
 {
-    "name": "JLChnToZ.VVMW.Editor",
+    "name": "KeisXR.VVMW.Editor",
     "rootNamespace": "",
     "references": [
         "Unity.TextMeshPro",
@@ -18,7 +18,7 @@
         "UniTask",
         "JLChnToZ.VRC.Foundation",
         "JLChnToZ.VRC.Foundation.Editor",
-        "JLChnToZ.VVMW",
+        "KeisXR.VVMW",
         "LazySwitch.Runtime",
         "LTCGI_Assembly",
         "at.pimaker.ltcgi.Editor",
