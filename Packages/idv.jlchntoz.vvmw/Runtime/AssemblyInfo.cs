@@ -2,7 +2,10 @@ using System.Runtime.CompilerServices;
 using JLChnToZ.VRC.Foundation;
 using JLChnToZ.VRC.Foundation.I18N;
 [assembly: InternalsVisibleTo("JLChnToZ.VVMW.Editor")]
+[assembly: InternalsVisibleTo("KeisXR.VVMW.Editor")]
 [assembly: EditorI18NSource(LanguageAssetPaths = new[] {
+    "Packages/com.github.keisxr.vvmw-lyrics/Resources/lang.json",
+    "Packages/com.github.keisxr.vvmw-lyrics/Resources/editor-lang.json",
     "Packages/idv.jlchntoz.vvmw/Resources/lang.json",
     "Packages/idv.jlchntoz.vvmw/Resources/editor-lang.json"
 })]

@@ -218,7 +218,7 @@ MonoBehaviour:
       Data: 11|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.Core, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.Core, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -284,7 +284,7 @@ MonoBehaviour:
       Data: 16|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.ActiveRegionManager, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.ActiveRegionManager, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -3935,7 +3935,7 @@ MonoBehaviour:
       Data: 239|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.Core[], JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.Core[], KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 

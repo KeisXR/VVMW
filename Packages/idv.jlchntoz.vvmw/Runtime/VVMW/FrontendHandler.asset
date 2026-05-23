@@ -980,7 +980,7 @@ MonoBehaviour:
       Data: 60|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.Core, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.Core, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -1442,7 +1442,7 @@ MonoBehaviour:
       Data: 89|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.InputFilterBase, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.InputFilterBase, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 

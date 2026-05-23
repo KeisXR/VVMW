@@ -167,7 +167,11 @@ namespace JLChnToZ.VRC.VVMW.Editors {
 
         static void LoadLocales() {
             if (locales != null && locales.Count > 0) return;
-            var file = File.ReadAllText("Packages/idv.jlchntoz.vvmw/Resources/ytdlp-regions.json");
+            var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(YtdlpResolver).Assembly);
+            var path = packageInfo != null ? Path.Combine(packageInfo.resolvedPath, "Resources", "ytdlp-regions.json") : null;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) path = "Packages/com.github.keisxr.vvmw-lyrics/Resources/ytdlp-regions.json";
+            if (!File.Exists(path)) path = "Packages/idv.jlchntoz.vvmw/Resources/ytdlp-regions.json";
+            var file = File.ReadAllText(path);
             var reader = new JsonReader(file);
             var json = JsonMapper.ToObject(reader);
             locales = new Dictionary<string, string>();

@@ -248,7 +248,7 @@ MonoBehaviour:
       Data: 16|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.CoreMatchingStrategy, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.CoreMatchingStrategy, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -314,7 +314,7 @@ MonoBehaviour:
       Data: 21|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.PlayerDetectOrigin, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.PlayerDetectOrigin, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -374,7 +374,7 @@ MonoBehaviour:
       Data: 25|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.Core[], JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.Core[], KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -950,7 +950,7 @@ MonoBehaviour:
       Data: 67|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.Core, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.Core, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 

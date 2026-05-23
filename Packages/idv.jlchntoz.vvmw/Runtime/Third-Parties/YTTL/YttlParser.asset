@@ -224,7 +224,7 @@ MonoBehaviour:
       Data: 12|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: VVMW.ThirdParties.Yttl.YttlManager, JLChnToZ.VVMW
+      Data: VVMW.ThirdParties.Yttl.YttlManager, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 

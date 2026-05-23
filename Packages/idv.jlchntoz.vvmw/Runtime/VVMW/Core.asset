@@ -248,7 +248,7 @@ MonoBehaviour:
       Data: 16|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.AbstractMediaPlayerHandler[], JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.AbstractMediaPlayerHandler[], KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -782,7 +782,7 @@ MonoBehaviour:
       Data: 49|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.InputFilterBase, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.InputFilterBase, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -1472,7 +1472,7 @@ MonoBehaviour:
       Data: 86|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.AbstractMediaPlayerHandler, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.AbstractMediaPlayerHandler, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -5037,7 +5037,7 @@ MonoBehaviour:
       Data: 267|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: VVMW.ThirdParties.Yttl.YttlManager, JLChnToZ.VVMW
+      Data: VVMW.ThirdParties.Yttl.YttlManager, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -5568,7 +5568,7 @@ MonoBehaviour:
       Data: 299|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.ActiveRegionManager, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.ActiveRegionManager, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -5806,7 +5806,7 @@ MonoBehaviour:
       Data: 314|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.AbstractAudioController[], JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.AbstractAudioController[], KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 

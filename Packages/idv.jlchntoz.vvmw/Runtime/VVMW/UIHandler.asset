@@ -530,7 +530,7 @@ MonoBehaviour:
       Data: 27|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.ButtonEntry[], JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.ButtonEntry[], KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -590,7 +590,7 @@ MonoBehaviour:
       Data: 31|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.Core, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.Core, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -656,7 +656,7 @@ MonoBehaviour:
       Data: 36|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.FrontendHandler, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.FrontendHandler, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -4282,7 +4282,7 @@ MonoBehaviour:
       Data: 261|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.RangeSlider, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.RangeSlider, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -4801,7 +4801,7 @@ MonoBehaviour:
       Data: 292|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.PooledScrollView, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.PooledScrollView, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 

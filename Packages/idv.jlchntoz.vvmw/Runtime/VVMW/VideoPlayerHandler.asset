@@ -62,7 +62,7 @@ MonoBehaviour:
       Data: 3|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.Core, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.Core, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -506,7 +506,7 @@ MonoBehaviour:
       Data: 29|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.AbstractMediaPlayerHandler, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.AbstractMediaPlayerHandler, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
@@ -1172,7 +1172,7 @@ MonoBehaviour:
       Data: 68|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: JLChnToZ.VRC.VVMW.RateLimitResolver, JLChnToZ.VVMW
+      Data: JLChnToZ.VRC.VVMW.RateLimitResolver, KeisXR.VVMW
     - Name: 
       Entry: 8
       Data: 
