@@ -33,8 +33,14 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         [NonSerialized] PlayList selectedPlayList;
         bool isDirty;
         Vector2 playListViewScrollPosition, playListEntryViewScrollPosition;
+        const string DefaultLyricsEndpoint = "https://k3isd.net/lrc";
+        const string NomSeekVrcUrlBase = "https://api.u2b.cx/vrcurl";
+        const string NomSeekVrcUrlSetterPath = "Assets/Nomlas/NomSeek/VRCURLSetter.prefab";
         string ytPlaylistUrl;
-        string lyricsEndpoint;
+        [SerializeField] string lyricsEndpoint = DefaultLyricsEndpoint;
+        [SerializeField] string lyricsPoolId;
+        [SerializeField] string dynamicLyricsPoolId;
+        [SerializeField] int dynamicLyricsPoolSize = 10000;
         public static event Action<FrontendHandler> OnFrontendUpdated;
         static readonly GUILayoutOption[] noExpandWidthOptions = new[] { GUILayout.ExpandWidth(false) };
 
@@ -164,10 +170,28 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                                     ReversePlaylist();
                         }
                         using (new EditorGUILayout.HorizontalScope()) {
-                            lyricsEndpoint = EditorGUILayout.TextField("Lyrics Proxy", lyricsEndpoint);
+                            lyricsEndpoint = EditorGUILayout.TextField("Lyrics Proxy", GetLyricsEndpoint());
                             using (new EditorGUI.DisabledGroupScope(selectedPlayList.entries == null || selectedPlayList.entries.Count == 0 || string.IsNullOrWhiteSpace(lyricsEndpoint)))
-                                if (GUILayout.Button("Generate Lyrics URLs", noExpandWidthOptions))
+                                if (GUILayout.Button("Generate Direct Lyrics URLs", noExpandWidthOptions))
                                     GenerateLyricsUrls();
+                        }
+                        using (new EditorGUILayout.HorizontalScope()) {
+                            lyricsPoolId = EditorGUILayout.TextField("Lyrics Pool", string.IsNullOrWhiteSpace(lyricsPoolId) ? GetDefaultLyricsPoolId() : lyricsPoolId);
+                            using (new EditorGUI.DisabledGroupScope(playLists.Count == 0 || string.IsNullOrWhiteSpace(lyricsEndpoint) || string.IsNullOrWhiteSpace(lyricsPoolId))) {
+                                if (GUILayout.Button("Generate Lyrics Pool", noExpandWidthOptions))
+                                    GenerateLyricsPool();
+                                if (GUILayout.Button("Export Lyrics Manifest", noExpandWidthOptions))
+                                    ExportLyricsManifest();
+                            }
+                        }
+                        using (new EditorGUILayout.HorizontalScope()) {
+                            dynamicLyricsPoolId = EditorGUILayout.TextField("NomSeek Pool", dynamicLyricsPoolId);
+                            dynamicLyricsPoolSize = Mathf.Max(1, EditorGUILayout.IntField("Size", dynamicLyricsPoolSize, GUILayout.Width(160)));
+                            if (GUILayout.Button("Detect", noExpandWidthOptions))
+                                DetectNomSeekLyricsPool();
+                            using (new EditorGUI.DisabledGroupScope(string.IsNullOrWhiteSpace(lyricsEndpoint) || string.IsNullOrWhiteSpace(dynamicLyricsPoolId)))
+                                if (GUILayout.Button("Generate NomSeek Lyrics Pool", noExpandWidthOptions))
+                                    GenerateDynamicLyricsPool();
                         }
                     }
                 }
@@ -251,7 +275,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 onAddCallback = AddPlayListEntry,
                 onRemoveCallback = RemovePlayListEntry,
                 onReorderCallback = ReorderPlayListEntry,
-                elementHeight = (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing) * 5,
+                elementHeight = (EditorGUIUtility.singleLineHeight + EditorGUIUtility.standardVerticalSpacing) * 6,
                 showDefaultBackground = false,
             };
         }
@@ -345,6 +369,18 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                     SetDirty(true);
                 }
             }
+            var lyricsPoolIndexRect = rect;
+            lyricsPoolIndexRect.yMin = badLyricsUrlRect.yMax + EditorGUIUtility.standardVerticalSpacing;
+            lyricsPoolIndexRect.height = EditorGUIUtility.singleLineHeight;
+            using (var changed = new EditorGUI.ChangeCheckScope()) {
+                lyricsPoolIndexRect = EditorGUI.PrefixLabel(lyricsPoolIndexRect, FUtils.GetTempContent("Lyrics Pool"));
+                var newIndex = EditorGUI.IntField(lyricsPoolIndexRect, entry.lyricsPoolIndex);
+                if (changed.changed) {
+                    entry.lyricsPoolIndex = newIndex;
+                    selectedPlayList.entries[index] = entry;
+                    SetDirty(true);
+                }
+            }
             EditorGUIUtility.labelWidth = labelSize;
         }
 
@@ -378,6 +414,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 var playListPlayerIndexProperty = serializedObject.FindProperty("playListPlayerIndex");
                 var playListLyricsUrlsProperty = serializedObject.FindProperty("playListLyricsUrls");
                 var playListBadLyricsUrlsProperty = serializedObject.FindProperty("playListBadLyricsUrls");
+                var playListLyricsPoolIndexesProperty = serializedObject.FindProperty("playListLyricsPoolIndexes");
                 var playListCount = playListTitlesProperty.arraySize;
                 for (int i = 0; i < playListCount; i++) {
                     var urlOffset = playListUrlOffsetsProperty.GetArrayElementAtIndex(i).intValue;
@@ -393,6 +430,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                             urlForQuest = playListUrlsQuestProperty.GetArrayElementAtIndex(urlOffset + j).FindPropertyRelative("url").stringValue,
                             lyricsUrl = GetUrlAt(playListLyricsUrlsProperty, urlOffset + j),
                             badLyricsUrl = GetUrlAt(playListBadLyricsUrlsProperty, urlOffset + j),
+                            lyricsPoolIndex = GetIntAt(playListLyricsPoolIndexesProperty, urlOffset + j, -1),
                             playerIndex = playListPlayerIndexProperty.GetArrayElementAtIndex(urlOffset + j).intValue - 1
                         });
                     playLists.Add(playList);
@@ -415,6 +453,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 var playListPlayerIndexProperty = serializedObject.FindProperty("playListPlayerIndex");
                 var playListLyricsUrlsProperty = serializedObject.FindProperty("playListLyricsUrls");
                 var playListBadLyricsUrlsProperty = serializedObject.FindProperty("playListBadLyricsUrls");
+                var playListLyricsPoolIndexesProperty = serializedObject.FindProperty("playListLyricsPoolIndexes");
                 playListTitlesProperty.arraySize = count;
                 playListUrlOffsetsProperty.arraySize = count;
                 for (int i = 0; i < count; i++) {
@@ -430,6 +469,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 playListPlayerIndexProperty.arraySize = offset;
                 playListLyricsUrlsProperty.arraySize = offset;
                 playListBadLyricsUrlsProperty.arraySize = offset;
+                if (playListLyricsPoolIndexesProperty != null) playListLyricsPoolIndexesProperty.arraySize = offset;
                 for (int i = 0; i < offset; i++) {
                     var entry = temp[i];
                     playListUrlsProperty.GetArrayElementAtIndex(i).FindPropertyRelative("url").stringValue = entry.url;
@@ -438,7 +478,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                     playListPlayerIndexProperty.GetArrayElementAtIndex(i).intValue = entry.playerIndex + 1;
                     playListLyricsUrlsProperty.GetArrayElementAtIndex(i).FindPropertyRelative("url").stringValue = entry.lyricsUrl;
                     playListBadLyricsUrlsProperty.GetArrayElementAtIndex(i).FindPropertyRelative("url").stringValue = entry.badLyricsUrl;
+                    if (playListLyricsPoolIndexesProperty != null) playListLyricsPoolIndexesProperty.GetArrayElementAtIndex(i).intValue = entry.lyricsPoolIndex;
                 }
+                SerializeLyricsPools(serializedObject, temp);
                 serializedObject.ApplyModifiedProperties();
             }
             SetDirty(false);
@@ -473,7 +515,14 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         void AddPlayListEntry(ReorderableList list) {
+            int previousCount = selectedPlayList.entries != null ? selectedPlayList.entries.Count : 0;
             ReorderableList.defaultBehaviours.DoAddButton(list);
+            if (selectedPlayList.entries != null && selectedPlayList.entries.Count > previousCount) {
+                int index = selectedPlayList.entries.Count - 1;
+                var entry = selectedPlayList.entries[index];
+                entry.lyricsPoolIndex = -1;
+                selectedPlayList.entries[index] = entry;
+            }
             SetDirty(true);
         }
 
@@ -612,6 +661,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         title = string.Empty,
                         url = url?.Get() ?? string.Empty,
                         urlForQuest = string.Empty,
+                        lyricsPoolIndex = -1,
                         playerIndex = playerIndex,
                     });
                     SetDirty(true);
@@ -635,6 +685,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         title = title,
                         url = url?.Get() ?? string.Empty,
                         urlForQuest = alt.Get() ?? string.Empty,
+                        lyricsPoolIndex = -1,
                         playerIndex = 0,
                     });
                     SetDirty(true);
@@ -655,6 +706,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         title = title,
                         url = url,
                         urlForQuest = string.Empty,
+                        lyricsPoolIndex = -1,
                         playerIndex = trackMode == 1 ? firstAvProPlayerIndex : firstUnityPlayerIndex,
                     });
                     SetDirty(true);
@@ -695,6 +747,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         title = title,
                         url = url,
                         urlForQuest = string.Empty,
+                        lyricsPoolIndex = -1,
                         playerIndex = trackMode == 1 ? firstAvProPlayerIndex : firstUnityPlayerIndex,
                     });
                     SetDirty(true);
@@ -715,6 +768,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         title = title,
                         url = url,
                         urlForQuest = string.Empty,
+                        lyricsPoolIndex = -1,
                         playerIndex = trackMode == 1 ? firstAvProPlayerIndex : firstUnityPlayerIndex,
                     });
                     SetDirty(true);
@@ -738,6 +792,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         title = title,
                         url = url?.Get() ?? string.Empty,
                         urlForQuest = string.Empty,
+                        lyricsPoolIndex = -1,
                         playerIndex = isLive ? firstAvProPlayerIndex : firstUnityPlayerIndex,
                     });
                     SetDirty(true);
@@ -761,6 +816,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         title = title,
                         url = url?.Get() ?? string.Empty,
                         urlForQuest = questUrl?.Get() ?? string.Empty,
+                        lyricsPoolIndex = -1,
                         playerIndex = 0,
                     });
                     SetDirty(true);
@@ -820,6 +876,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 jsonWriter.WritePropertyName("badLyricsUrl");
                 jsonWriter.Write(entry.badLyricsUrl);
             }
+            if (entry.lyricsPoolIndex >= 0) {
+                jsonWriter.WritePropertyName("lyricsPoolIndex");
+                jsonWriter.Write(entry.lyricsPoolIndex);
+            }
             jsonWriter.WriteObjectEnd();
         }
 
@@ -868,6 +928,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                     var urlForQuest = entry["urlForQuest"]?.ToString();
                     var lyricsUrl = GetOptionalString(entry, "lyricsUrl");
                     var badLyricsUrl = GetOptionalString(entry, "badLyricsUrl");
+                    var lyricsPoolIndex = GetOptionalInt(entry, "lyricsPoolIndex", -1);
                     var playerIndex = (int)entry["playerIndex"];
                     selectedPlayList.entries.Add(new PlayListEntry {
                         title = title,
@@ -875,6 +936,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         urlForQuest = urlForQuest,
                         lyricsUrl = lyricsUrl,
                         badLyricsUrl = badLyricsUrl,
+                        lyricsPoolIndex = lyricsPoolIndex,
                         playerIndex = playerIndex,
                     });
                     SetDirty(true);
@@ -893,6 +955,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                     title = entry.title,
                     url = entry.url,
                     urlForQuest = string.Empty,
+                    lyricsPoolIndex = -1,
                     playerIndex = 0,
                 });
             SetDirty(true);
@@ -923,17 +986,226 @@ namespace JLChnToZ.VRC.VVMW.Editors {
 
         void GenerateLyricsUrls() {
             if (selectedPlayList.entries == null || selectedPlayList.entries.Count == 0) return;
-            var endpoint = lyricsEndpoint.Trim().TrimEnd('/');
+            var endpoint = GetLyricsEndpoint();
             if (string.IsNullOrEmpty(endpoint)) return;
             for (int i = 0; i < selectedPlayList.entries.Count; i++) {
                 var entry = selectedPlayList.entries[i];
-                var title = Uri.EscapeDataString(entry.title ?? "");
-                var mediaUrl = Uri.EscapeDataString(entry.url ?? "");
-                entry.lyricsUrl = $"{endpoint}/lyrics?title={title}&media_url={mediaUrl}";
-                entry.badLyricsUrl = $"{endpoint}/lyrics/report?title={title}&media_url={mediaUrl}";
+                var title = Uri.EscapeDataString((entry.title ?? "").Trim());
+                var mediaUrl = Uri.EscapeDataString((entry.url ?? "").Trim());
+                entry.lyricsUrl = $"{endpoint}/v1/lyrics?title={title}&url={mediaUrl}";
+                entry.badLyricsUrl = $"{endpoint}/v1/report?title={title}&url={mediaUrl}";
+                entry.lyricsPoolIndex = -1;
                 selectedPlayList.entries[i] = entry;
             }
             SetDirty(true);
+        }
+
+        void GenerateLyricsPool() {
+            if (playLists.Count == 0) return;
+            lyricsEndpoint = GetLyricsEndpoint();
+            lyricsPoolId = NormalizeLyricsPoolId(string.IsNullOrWhiteSpace(lyricsPoolId) ? GetDefaultLyricsPoolId() : lyricsPoolId);
+            int slot = 0;
+            for (int i = 0; i < playLists.Count; i++) {
+                var playList = playLists[i];
+                if (playList.entries == null) continue;
+                for (int j = 0; j < playList.entries.Count; j++) {
+                    var entry = playList.entries[j];
+                    entry.lyricsPoolIndex = slot++;
+                    entry.lyricsUrl = string.Empty;
+                    entry.badLyricsUrl = string.Empty;
+                    playList.entries[j] = entry;
+                }
+                playLists[i] = playList;
+            }
+            SerializePlayList();
+        }
+
+        void ExportLyricsManifest() {
+            if (playLists.Count == 0) return;
+            lyricsPoolId = NormalizeLyricsPoolId(string.IsNullOrWhiteSpace(lyricsPoolId) ? GetDefaultLyricsPoolId() : lyricsPoolId);
+            if (!HasLyricsPoolIndexes()) GenerateLyricsPool();
+            var path = EditorUtility.SaveFilePanel("Export Lyrics Manifest", Application.dataPath, $"{lyricsPoolId}.json", "json");
+            if (string.IsNullOrEmpty(path)) return;
+            var jsonWriter = new JsonWriter {
+                PrettyPrint = true,
+                IndentValue = 2
+            };
+            jsonWriter.WriteObjectStart();
+            jsonWriter.WritePropertyName("poolId");
+            jsonWriter.Write(lyricsPoolId);
+            jsonWriter.WritePropertyName("slots");
+            jsonWriter.WriteArrayStart();
+            var written = new HashSet<int>();
+            for (int i = 0; i < playLists.Count; i++) {
+                var playList = playLists[i];
+                if (playList.entries == null) continue;
+                for (int j = 0; j < playList.entries.Count; j++) {
+                    var entry = playList.entries[j];
+                    if (entry.lyricsPoolIndex < 0 || !written.Add(entry.lyricsPoolIndex)) continue;
+                    WriteLyricsManifestSlot(jsonWriter, playList.title, i, j, entry);
+                }
+            }
+            jsonWriter.WriteArrayEnd();
+            jsonWriter.WriteObjectEnd();
+            File.WriteAllText(path, jsonWriter.ToString());
+        }
+
+        void DetectNomSeekLyricsPool() {
+            if (TryDetectNomSeekPool(out string poolId, out int poolSize)) {
+                dynamicLyricsPoolId = poolId;
+                dynamicLyricsPoolSize = Mathf.Max(1, poolSize);
+            } else {
+                EditorUtility.DisplayDialog(
+                    "NomSeek Pool",
+                    $"Could not detect a NomSeek VRCURLSetter at {NomSeekVrcUrlSetterPath}.",
+                    "OK"
+                );
+            }
+        }
+
+        void GenerateDynamicLyricsPool() {
+            if (frontendHandler == null) return;
+            var poolId = (dynamicLyricsPoolId ?? string.Empty).Trim().Trim('/');
+            if (string.IsNullOrEmpty(poolId)) return;
+            dynamicLyricsPoolId = poolId;
+            dynamicLyricsPoolSize = Mathf.Max(1, dynamicLyricsPoolSize);
+            int arraySize = dynamicLyricsPoolSize + 1;
+            var endpoint = GetLyricsEndpoint();
+            using (var serializedObject = new SerializedObject(frontendHandler)) {
+                var usePoolProperty = serializedObject.FindProperty("useDynamicLyricsUrlPool");
+                var mediaPrefixProperty = serializedObject.FindProperty("dynamicLyricsMediaUrlPrefix");
+                var requestPoolProperty = serializedObject.FindProperty("dynamicLyricsRequestUrlPool");
+                var reportPoolProperty = serializedObject.FindProperty("dynamicLyricsReportUrlPool");
+                if (requestPoolProperty == null || reportPoolProperty == null || mediaPrefixProperty == null) return;
+                if (usePoolProperty != null) usePoolProperty.boolValue = true;
+                mediaPrefixProperty.stringValue = $"{NomSeekVrcUrlBase}/{poolId}/";
+                requestPoolProperty.arraySize = arraySize;
+                reportPoolProperty.arraySize = arraySize;
+                for (int i = 0; i < arraySize; i++) {
+                    requestPoolProperty.GetArrayElementAtIndex(i).FindPropertyRelative("url").stringValue = $"{endpoint}/nomseek/{poolId}/{i}/lyrics";
+                    reportPoolProperty.GetArrayElementAtIndex(i).FindPropertyRelative("url").stringValue = $"{endpoint}/nomseek/{poolId}/{i}/report";
+                }
+                serializedObject.ApplyModifiedProperties();
+            }
+            EditorUtility.SetDirty(frontendHandler);
+            OnFrontendUpdated?.Invoke(frontendHandler);
+        }
+
+        void WriteLyricsManifestSlot(JsonWriter jsonWriter, string playListTitle, int playListIndex, int entryIndex, PlayListEntry entry) {
+            jsonWriter.WriteObjectStart();
+            jsonWriter.WritePropertyName("slot");
+            jsonWriter.Write(entry.lyricsPoolIndex);
+            jsonWriter.WritePropertyName("key");
+            jsonWriter.Write($"{lyricsPoolId}:{entry.lyricsPoolIndex}");
+            jsonWriter.WritePropertyName("title");
+            jsonWriter.Write((entry.title ?? string.Empty).Trim());
+            jsonWriter.WritePropertyName("media_url");
+            jsonWriter.Write((entry.url ?? string.Empty).Trim());
+            jsonWriter.WritePropertyName("playlist");
+            jsonWriter.Write(playListTitle ?? string.Empty);
+            jsonWriter.WritePropertyName("playlist_index");
+            jsonWriter.Write(playListIndex);
+            jsonWriter.WritePropertyName("entry_index");
+            jsonWriter.Write(entryIndex);
+            jsonWriter.WritePropertyName("player_index");
+            jsonWriter.Write(entry.playerIndex);
+            jsonWriter.WriteObjectEnd();
+        }
+
+        void SerializeLyricsPools(SerializedObject serializedObject, List<PlayListEntry> entries) {
+            var requestPoolProperty = serializedObject.FindProperty("lyricsRequestUrlPool");
+            var reportPoolProperty = serializedObject.FindProperty("lyricsReportUrlPool");
+            var usePoolProperty = serializedObject.FindProperty("useLyricsUrlPool");
+            if (requestPoolProperty == null || reportPoolProperty == null) return;
+
+            int maxIndex = -1;
+            for (int i = 0; i < entries.Count; i++)
+                if (entries[i].lyricsPoolIndex > maxIndex) maxIndex = entries[i].lyricsPoolIndex;
+            if (usePoolProperty != null) usePoolProperty.boolValue = maxIndex >= 0;
+            if (maxIndex < 0) {
+                requestPoolProperty.arraySize = 0;
+                reportPoolProperty.arraySize = 0;
+                return;
+            }
+
+            var endpoint = GetLyricsEndpoint();
+            var poolId = NormalizeLyricsPoolId(string.IsNullOrWhiteSpace(lyricsPoolId) ? GetDefaultLyricsPoolId() : lyricsPoolId);
+            lyricsPoolId = poolId;
+            requestPoolProperty.arraySize = maxIndex + 1;
+            reportPoolProperty.arraySize = maxIndex + 1;
+            for (int i = 0; i <= maxIndex; i++) {
+                requestPoolProperty.GetArrayElementAtIndex(i).FindPropertyRelative("url").stringValue = string.Empty;
+                reportPoolProperty.GetArrayElementAtIndex(i).FindPropertyRelative("url").stringValue = string.Empty;
+            }
+            for (int i = 0; i < entries.Count; i++) {
+                int index = entries[i].lyricsPoolIndex;
+                if (index < 0) continue;
+                requestPoolProperty.GetArrayElementAtIndex(index).FindPropertyRelative("url").stringValue = $"{endpoint}/pool/{poolId}/{index}/lyrics";
+                reportPoolProperty.GetArrayElementAtIndex(index).FindPropertyRelative("url").stringValue = $"{endpoint}/pool/{poolId}/{index}/report";
+            }
+        }
+
+        bool HasLyricsPoolIndexes() {
+            for (int i = 0; i < playLists.Count; i++) {
+                var playList = playLists[i];
+                if (playList.entries == null) continue;
+                for (int j = 0; j < playList.entries.Count; j++)
+                    if (playList.entries[j].lyricsPoolIndex >= 0) return true;
+            }
+            return false;
+        }
+
+        string GetLyricsEndpoint() {
+            var endpoint = string.IsNullOrWhiteSpace(lyricsEndpoint) ? DefaultLyricsEndpoint : lyricsEndpoint;
+            return endpoint.Trim().TrimEnd('/');
+        }
+
+        string GetDefaultLyricsPoolId() {
+            var scenePath = frontendHandler != null ? frontendHandler.gameObject.scene.path : string.Empty;
+            var sceneName = string.IsNullOrEmpty(scenePath) ? "vvmw" : Path.GetFileNameWithoutExtension(scenePath);
+            return NormalizeLyricsPoolId(sceneName);
+        }
+
+        static string NormalizeLyricsPoolId(string value) {
+            value = (value ?? string.Empty).Trim().ToLowerInvariant();
+            var chars = value.ToCharArray();
+            int writeIndex = 0;
+            bool previousDash = false;
+            for (int i = 0; i < chars.Length; i++) {
+                char c = chars[i];
+                bool valid = c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '.';
+                if (valid) {
+                    chars[writeIndex++] = c;
+                    previousDash = false;
+                } else if (!previousDash && writeIndex > 0) {
+                    chars[writeIndex++] = '-';
+                    previousDash = true;
+                }
+            }
+            while (writeIndex > 0 && chars[writeIndex - 1] == '-') writeIndex--;
+            return writeIndex > 0 ? new string(chars, 0, writeIndex) : "vvmw";
+        }
+
+        static bool TryDetectNomSeekPool(out string poolId, out int poolSize) {
+            poolId = string.Empty;
+            poolSize = 0;
+            var path = Path.Combine(Directory.GetCurrentDirectory(), NomSeekVrcUrlSetterPath);
+            if (!File.Exists(path)) return false;
+            const string prefix = "  - url: https://api.u2b.cx/vrcurl/";
+            int maxIndex = -1;
+            foreach (var line in File.ReadLines(path)) {
+                if (!line.StartsWith(prefix)) continue;
+                var value = line.Substring(prefix.Length).Trim();
+                int slashIndex = value.LastIndexOf('/');
+                if (slashIndex <= 0 || slashIndex >= value.Length - 1) continue;
+                var currentPoolId = value.Substring(0, slashIndex);
+                if (!int.TryParse(value.Substring(slashIndex + 1), out int index)) continue;
+                if (string.IsNullOrEmpty(poolId)) poolId = currentPoolId;
+                if (currentPoolId == poolId && index > maxIndex) maxIndex = index;
+            }
+            if (string.IsNullOrEmpty(poolId) || maxIndex < 0) return false;
+            poolSize = maxIndex;
+            return true;
         }
 
         [Serializable]
@@ -949,6 +1221,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             public string urlForQuest;
             public string lyricsUrl;
             public string badLyricsUrl;
+            public int lyricsPoolIndex;
             public int playerIndex;
         }
 
@@ -957,10 +1230,27 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             return property.GetArrayElementAtIndex(index).FindPropertyRelative("url").stringValue;
         }
 
+        static int GetIntAt(SerializedProperty property, int index, int defaultValue) {
+            if (property == null || index < 0 || index >= property.arraySize) return defaultValue;
+            return property.GetArrayElementAtIndex(index).intValue;
+        }
+
         static string GetOptionalString(JsonData data, string key) {
             if (data == null || data.GetJsonType() != JsonType.Object || !data.Keys.Contains(key)) return string.Empty;
             var value = data[key];
             return value == null ? string.Empty : value.ToString();
+        }
+
+        static int GetOptionalInt(JsonData data, string key, int defaultValue) {
+            if (data == null || data.GetJsonType() != JsonType.Object || !data.Keys.Contains(key)) return defaultValue;
+            var value = data[key];
+            if (value == null) return defaultValue;
+            try {
+                return (int)value;
+            } catch {
+                if (int.TryParse(value.ToString(), out int result)) return result;
+                return defaultValue;
+            }
         }
     }
 }

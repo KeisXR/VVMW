@@ -8,7 +8,22 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _OnSeek() {
+            isSeeking = true;
+            seekGuardUntil = UnityEngine.Time.time + 0.75F;
             core.Progress = progressSlider.value;
+            SendCustomEventDelayedSeconds(nameof(_EndSeekGuard), 0.75F);
+        }
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _EndSeekGuard() {
+            if (UnityEngine.Time.time < seekGuardUntil) {
+                SendCustomEventDelayedSeconds(nameof(_EndSeekGuard), seekGuardUntil - UnityEngine.Time.time);
+                return;
+            }
+            isSeeking = false;
+            UpdateProgressOnce();
         }
 
 #if COMPILER_UDONSHARP
@@ -54,7 +69,8 @@ namespace JLChnToZ.VRC.VVMW {
                 else
                     SetText(statusText, statusTMPro, string.Format(languageManager.GetLocale("Playing"), time, durationTS));
                 if (Utilities.IsValid(progressSlider)) {
-                    progressSlider.SetValueWithoutNotify(core.Progress);
+                    if (!isSeeking)
+                        progressSlider.SetValueWithoutNotify(core.Progress);
                     progressSlider.interactable = !Utilities.IsValid(handler) || !handler.Locked;
                 }
             }

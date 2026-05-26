@@ -31,10 +31,7 @@ namespace JLChnToZ.VRC.VVMW {
 
         void InitLyricsPanel() => _OnLyricsData();
 
-#if COMPILER_UDONSHARP
-        public
-#endif
-        void _ReportBadLyrics() {
+        public void _ReportBadLyrics() {
             if (Utilities.IsValid(core)) core._ReportBadLyrics();
         }
 
@@ -45,16 +42,10 @@ namespace JLChnToZ.VRC.VVMW {
             if (!afterFirstRun || !Utilities.IsValid(core) || !Utilities.IsValid(lyricsPanelRoot)) return;
             var state = core.LyricsState;
             bool showSynced = state == Core.LYRICS_SYNCED;
-            bool showPlain = state == Core.LYRICS_PLAIN;
-            bool showStatus = state == Core.LYRICS_LOADING ||
-                state == Core.LYRICS_INSTRUMENTAL ||
-                state == Core.LYRICS_NOT_FOUND ||
-                state == Core.LYRICS_ERROR ||
-                state == Core.LYRICS_REPORTED;
-            lyricsPanelRoot.SetActive(state != Core.LYRICS_NONE);
+            lyricsPanelRoot.SetActive(true);
             if (Utilities.IsValid(lyricsSyncedRoot)) lyricsSyncedRoot.SetActive(showSynced);
-            if (Utilities.IsValid(lyricsPlainRoot)) lyricsPlainRoot.SetActive(showPlain);
-            if (Utilities.IsValid(lyricsStatusRoot)) lyricsStatusRoot.SetActive(showStatus);
+            if (Utilities.IsValid(lyricsPlainRoot)) lyricsPlainRoot.SetActive(false);
+            if (Utilities.IsValid(lyricsStatusRoot)) lyricsStatusRoot.SetActive(true);
             if (Utilities.IsValid(lyricsReportButtonObject)) lyricsReportButtonObject.SetActive(core.CanReportLyrics);
             if (Utilities.IsValid(lyricsReportButton)) lyricsReportButton.interactable = core.CanReportLyrics;
             SetLocalizedText(lyricsReportButtonText, lyricsReportButtonTMPro, "LyricsReportButton");
@@ -62,9 +53,10 @@ namespace JLChnToZ.VRC.VVMW {
             switch (state) {
                 case Core.LYRICS_SYNCED:
                     _OnLyricsLineChange();
+                    UpdateLyricsPlaybackStatus();
                     break;
                 case Core.LYRICS_PLAIN:
-                    SetText(lyricsPlainText, lyricsPlainTMPro, core.LyricsPlainText);
+                    SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, "LyricsPlainUnavailable");
                     break;
                 case Core.LYRICS_LOADING:
                     SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, "LyricsLoading");
@@ -84,6 +76,9 @@ namespace JLChnToZ.VRC.VVMW {
                     else
                         SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, "LyricsError");
                     break;
+                default:
+                    SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, core.State > 0 && !core.HasLyricsSource ? "LyricsNoSource" : "Ready");
+                    break;
             }
         }
 
@@ -95,6 +90,11 @@ namespace JLChnToZ.VRC.VVMW {
             SetText(lyricsPreviousText, lyricsPreviousTMPro, core.LyricsPreviousLine);
             SetText(lyricsCurrentText, lyricsCurrentTMPro, core.LyricsCurrentLine);
             SetText(lyricsNextText, lyricsNextTMPro, core.LyricsNextLine);
+        }
+
+        void UpdateLyricsPlaybackStatus() {
+            if (!afterFirstRun || !Utilities.IsValid(core) || core.LyricsState != Core.LYRICS_SYNCED) return;
+            SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, core.IsPlaying ? "LyricsPlaying" : "Ready");
         }
     }
 }

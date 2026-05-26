@@ -30,6 +30,8 @@ namespace JLChnToZ.VRC.VVMW {
         int rangeLoopDurationMs = 1; // prevent division by zero
         double syncLatency;
         float lastSyncRawTime;
+        float localSeekIgnoreRemoteUntil;
+        double lastLocalSeekServerTime = -1;
         bool isBuffering;
         bool isResyncTime;
         bool isCheckingRangeLoop;
@@ -108,8 +110,24 @@ namespace JLChnToZ.VRC.VVMW {
                 if (!Utilities.IsValid(activeHandler)) return;
                 var duration = activeHandler.Duration;
                 if (duration <= 0 || float.IsInfinity(duration)) return;
+                if (synced) {
+                    localSeekIgnoreRemoteUntil = UnityEngine.Time.time + 3F;
+                    lastLocalSeekServerTime = Networking.GetServerTimeInSeconds();
+                    if (!Networking.IsOwner(gameObject))
+                        Networking.SetOwner(Networking.LocalPlayer, gameObject);
+                }
                 Time = duration * value;
-                RequestSync();
+                UpdateLyricsLine();
+                if (synced && Networking.IsOwner(gameObject)) {
+                    lastSyncTime = Networking.GetNetworkDateTime();
+                    ownerNetworkTime = Networking.GetServerTimeInMilliseconds();
+                    syncedSpeed = speed;
+                    state = activeHandler.IsPlaying ? PLAYING : PAUSED;
+                    time = (int)(CalcSyncTime(out actualSpeed) * 1000);
+                    syncedActualSpeed = actualSpeed;
+                    RequestSerialization();
+                } else
+                    RequestSync();
             }
         }
 
@@ -162,8 +180,19 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use only. Do not call this method.
         /// </summary>
         public override void OnOwnershipTransferred(VRCPlayerApi player) {
-            if (!player.isLocal) isLocalReloading = false;
+            bool isLocalOwner = Utilities.IsValid(player) && player.isLocal;
+            if (!isLocalOwner) isLocalReloading = false;
             syncLatency = 0;
+            if (isLocalOwner && synced)
+                SendCustomEventDelayedFrames(nameof(_DeferredOwnerSync), 0);
+        }
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _DeferredOwnerSync() {
+            if (!synced || !Networking.IsOwner(gameObject)) return;
+            RequestSerialization();
         }
 
         void StartSyncTime() {

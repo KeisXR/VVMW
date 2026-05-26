@@ -232,6 +232,8 @@ namespace JLChnToZ.VRC.VVMW {
         int luminancePropertyId;
 
         bool hasUpdate, wasUnlocked, hasUnlockInit;
+        bool isSeeking;
+        float seekGuardUntil;
         byte selectedPlayer = 1;
         DateTime joinTime, playListLastInteractTime;
         TimeSpan interactCoolDown = TimeSpan.FromSeconds(5);
@@ -239,6 +241,7 @@ namespace JLChnToZ.VRC.VVMW {
         int initKey, playbackStateKey, enqueueKey;
 
         void OnEnable() {
+            ResolveCoreReference();
             if (Utilities.IsValid(playbackControlsAnimator)) {
                 if (!afterFirstRun) {
                     initKey = Animator.StringToHash("Init");
@@ -266,6 +269,11 @@ namespace JLChnToZ.VRC.VVMW {
             _OnSpeedChange();
             _OnLyricsData();
             UpdatePlayerText();
+        }
+
+        void ResolveCoreReference() {
+            if (!Utilities.IsValid(core) && Utilities.IsValid(handler))
+                core = handler.core;
         }
 
 #if COMPILER_UDONSHARP
@@ -599,6 +607,7 @@ namespace JLChnToZ.VRC.VVMW {
                 _OnPerformerChange();
             }
             if (Utilities.IsValid(abLoopSlider)) abLoopSliderObject.SetActive(isRangeLooping && unlocked);
+            UpdateLyricsPlaybackStatus();
         }
 
         void SetLocalizedText(Text text, TextMeshProUGUI tmp, string locale) {

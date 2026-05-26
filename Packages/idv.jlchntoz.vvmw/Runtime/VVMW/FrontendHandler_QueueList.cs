@@ -140,10 +140,10 @@ namespace JLChnToZ.VRC.VVMW {
             }
             RecordPlaybackHistory(pcUrl, questUrl, index, queuedTitle);
             localCurrentTitle = queuedTitle;
-            RequestSync();
-            ClearCoreLyricsSource();
+            SetCoreDynamicLyricsSource(pcUrl, questUrl, false);
             core.PlayUrl(pcUrl, questUrl, index);
             core._ResetTitle();
+            RequestSync();
         }
 
         void PlayQueueList(int index, bool deleteOnly) {
@@ -151,10 +151,11 @@ namespace JLChnToZ.VRC.VVMW {
             if (newLength <= 0) {
                 if (!deleteOnly && localPlayingPlaylistIndex == 0 && index < 0 && RepeatAll) {
                     GetLastPlayedUrl(out VRCUrl lastPCUrl, out VRCUrl lastQuestUrl, out byte lastActivePlayer);
-                    ClearCoreLyricsSource();
+                    SetCoreDynamicLyricsSource(lastPCUrl, lastQuestUrl, false);
                     core.PlayUrl(lastPCUrl, lastQuestUrl, lastActivePlayer);
                     core._ResetTitle();
                     RecordPlaybackHistory(lastPCUrl, lastQuestUrl, lastActivePlayer, localCurrentTitle);
+                    RequestSync();
                 }
                 return;
             }
@@ -212,7 +213,7 @@ namespace JLChnToZ.VRC.VVMW {
             localQueuedTitles = newTitles;
             if (!deleteOnly) {
                 localCurrentTitle = title;
-                ClearCoreLyricsSource();
+                SetCoreDynamicLyricsSource(url, questUrl, false);
                 core.PlayUrl(url, questUrl, playerIndex);
                 core._ResetTitle();
                 RecordPlaybackHistory(url, questUrl, playerIndex, title);

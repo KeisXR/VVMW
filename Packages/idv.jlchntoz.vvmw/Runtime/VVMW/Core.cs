@@ -719,6 +719,10 @@ namespace JLChnToZ.VRC.VVMW {
         /// <param name="result"></param>
         public override void OnDeserialization(DeserializationResult result) {
             if (!synced) return;
+            if (Networking.IsOwner(gameObject) &&
+                (UnityEngine.Time.time < localSeekIgnoreRemoteUntil ||
+                    (lastLocalSeekServerTime > 0 && result.sendTime > 0 && result.sendTime < lastLocalSeekServerTime)))
+                return;
             bool activePlayerChanged = localActivePlayer != activePlayer;
             if (activePlayerChanged) ActivePlayer = activePlayer;
             float sendTime = result.sendTime;

@@ -50,6 +50,7 @@ namespace JLChnToZ.VRC.VVMW {
         public string LyricsNextLine => lyricsNextLine;
         public string LyricsTrackName => lyricsTrackName;
         public string LyricsArtistName => lyricsArtistName;
+        public bool HasLyricsSource => !VRCUrl.IsNullOrEmpty(lyricsRequestUrl);
         public bool CanReportLyrics =>
             !isLyricsReportPending &&
             !VRCUrl.IsNullOrEmpty(lyricsBadReportUrl) &&

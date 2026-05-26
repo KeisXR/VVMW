@@ -360,6 +360,7 @@ namespace JLChnToZ.VRC.VVMW {
             flags = localFlags;
             playListIndex = (ushort)localPlayListIndex;
             playingIndex = localPlayingIndex;
+            PrepareLyricsSync();
             bool shouldLoop = RepeatOne;
             if (core.Loop != shouldLoop) {
                 core.Loop = shouldLoop;
@@ -394,7 +395,7 @@ namespace JLChnToZ.VRC.VVMW {
                     core.SetTitle(playListEntryTitles[playingIndex], playListTitles[playListIndex - 1]);
                 }
             } else {
-                ClearCoreLyricsSource();
+                ApplySyncedDynamicLyricsSource(true);
                 core._ResetTitle();
             }
             localPlayListIndex = playListIndex;
