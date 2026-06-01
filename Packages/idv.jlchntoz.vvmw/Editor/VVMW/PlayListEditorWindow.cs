@@ -184,15 +184,6 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                                     ExportLyricsManifest();
                             }
                         }
-                        using (new EditorGUILayout.HorizontalScope()) {
-                            dynamicLyricsPoolId = EditorGUILayout.TextField("NomSeek Pool", dynamicLyricsPoolId);
-                            dynamicLyricsPoolSize = Mathf.Max(1, EditorGUILayout.IntField("Size", dynamicLyricsPoolSize, GUILayout.Width(160)));
-                            if (GUILayout.Button("Detect", noExpandWidthOptions))
-                                DetectNomSeekLyricsPool();
-                            using (new EditorGUI.DisabledGroupScope(string.IsNullOrWhiteSpace(lyricsEndpoint) || string.IsNullOrWhiteSpace(dynamicLyricsPoolId)))
-                                if (GUILayout.Button("Generate NomSeek Lyrics Pool", noExpandWidthOptions))
-                                    GenerateDynamicLyricsPool();
-                        }
                     }
                 }
                 switch (evt.type) {
@@ -1160,8 +1151,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             return endpoint.Trim().TrimEnd('/');
         }
 
-        string GetDefaultLyricsPoolId() {
-            var scenePath = frontendHandler != null ? frontendHandler.gameObject.scene.path : string.Empty;
+        string GetDefaultLyricsPoolId() => GetDefaultLyricsPoolId(frontendHandler);
+
+        static string GetDefaultLyricsPoolId(FrontendHandler handler) {
+            var scenePath = handler != null ? handler.gameObject.scene.path : string.Empty;
             var sceneName = string.IsNullOrEmpty(scenePath) ? "vvmw" : Path.GetFileNameWithoutExtension(scenePath);
             return NormalizeLyricsPoolId(sceneName);
         }

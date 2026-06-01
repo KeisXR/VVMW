@@ -1,6 +1,6 @@
 # LRCLIB Lyrics Integration Status
 
-最終更新: 2026-05-23
+最終更新: 2026-05-30
 
 このドキュメントは、VizVid lyrics fork (`com.github.keisxr.vvmw-lyrics`) に対して行ったLRCLIB歌詞連携まわりの実装状況と、パッケージID変更に伴う移植対応をまとめる。
 
@@ -8,7 +8,7 @@
 
 Unity/VRC側には、歌詞データを受け取り、表示し、誤った歌詞を報告するための受け皿を実装済み。
 
-一方で、LRCLIB検索・選曲・除外履歴・nginx公開を担当するサーバー側はまだ未実装。現時点のUnity側は「プレイリスト項目ごとに設定された歌詞取得URLへ `VRCStringDownloader` でアクセスし、返ってきたJSONを表示する」構成になっている。
+LRCLIB検索・選曲・除外履歴・nginx公開を担当するサーバー側は `https://k3isd.net/lrc/` で稼働している。Unity側は「プレイリスト項目ごとに設定された歌詞取得URL」または「NomSeek VRCURL slotに対応した歌詞取得URL」へ `VRCStringDownloader` でアクセスし、返ってきたJSONを表示する構成になっている。
 
 ## Package / Assembly
 
@@ -118,8 +118,13 @@ UI向けには以下の3行を公開している。
 
 - `playListLyricsUrls`
 - `playListBadLyricsUrls`
+- `dynamicLyricsMediaUrlPrefix`
+- `dynamicLyricsRequestUrlPool`
+- `dynamicLyricsReportUrlPool`
 
 再生対象が決まったタイミングで `SetCoreLyricsSource()` を呼び、該当entryの歌詞URLと報告URLを `Core` に渡す。再生停止、queue遷移、URL入力などでplaylist entryと紐づかない再生に切り替わる場合は `_ClearLyricsSource()` で歌詞表示を消す。
+
+URL入力などのplaylist外再生では、`dynamicLyricsMediaUrlPrefix` に一致する再生URLからslot番号を抽出し、`dynamicLyricsRequestUrlPool[slot]` / `dynamicLyricsReportUrlPool[slot]` を `Core` に渡す。通常のYouTube URLをVRC内で任意のlyrics URLへ動的変換することはできないため、playlist外で歌詞を出す場合はNomSeekの `https://api.u2b.cx/vrcurl/{pool}/{slot}` 形式の再生URLに対応する。
 
 ## Runtime: UI
 
@@ -169,6 +174,20 @@ UI向けには以下の3行を公開している。
 
 `PlayListEditorWindow` でプレイリスト項目ごとの歌詞取得URLと誤り報告URLを編集できるようにしている。
 
+NomSeek VRCURL slot向けに以下の生成補助を追加している。
+
+- `NomSeek Pool`: pool id。未入力時はscene名から生成
+- `Max Slot`: 生成する最大slot番号。`0..Max Slot` のURL配列を作る
+- `Generate Dynamic Lyrics Pool`: NomSeekのVRCURL slotと `lrcserve` の `/nomseek` endpointを対応付ける
+
+生成後の設定値:
+
+```text
+dynamicLyricsMediaUrlPrefix = https://api.u2b.cx/vrcurl/{pool}/
+dynamicLyricsRequestUrlPool[i] = https://k3isd.net/lrc/nomseek/{pool}/{i}/lyrics
+dynamicLyricsReportUrlPool[i] = https://k3isd.net/lrc/nomseek/{pool}/{i}/report
+```
+
 ### Lyrics Panel Generator
 
 `LrclibLyricsPanelGenerator` を追加した。
@@ -215,16 +234,15 @@ NomSeek VizVid Connector側もfork後のpackage/asmdefを参照するように�
 
 ### サーバー側
 
-まだ未実装。
+`lrcserve` として実装済み。主なendpoint:
 
-必要なもの:
+- `GET /lrc/v1/lyrics`
+- `GET /lrc/v1/report`
+- `GET /lrc/pool/{pool}/{slot}/lyrics`
+- `GET /lrc/nomseek/{pool}/{slot}/lyrics`
+- `GET /lrc/nomseek/{pool}/{slot}/report`
 
-- LRCLIB検索APIへの問い合わせ
-- 曲名/作者/動画タイトル/URLから検索queryを作る処理
-- 複数候補からの選択ルール
-- 同期歌詞が間違っていた場合の除外記録
-- 報告URLへのGETを受けてbad lyricsとして保存する処理
-- nginx配下でVRChatからアクセス可能なHTTPS endpointとして公開する設定
+自前 `/vrcurl` slot案はUXが複雑になったためUnity側の導線から撤回した。現行のplaylist外再生対応はNomSeekのVRCURL slotに乗り、歌詞取得・誤り報告だけを `lrcserve` の `/nomseek` endpointで処理する。
 
 ### フォールバック方針
 
@@ -239,8 +257,7 @@ NomSeek VizVid Connector側もfork後のpackage/asmdefを参照するように�
 - Unity Editorでの完全compile確認
 - Lyrics Panel prefab生成結果の確認
 - ClientSim / VRChat Build & Testでの再生中歌詞更新確認
-- 報告URLアクセスの動作確認
-- サーバー実装後の実LRCLIB取得確認
+- NomSeek VRCURL slot URL再生時のVRChat Client実地確認
 
 直近のUnity batchmode compileは、対象World projectが既にUnityで開かれていたため実行できなかった。
 

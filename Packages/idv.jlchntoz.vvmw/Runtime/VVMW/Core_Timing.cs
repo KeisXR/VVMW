@@ -421,6 +421,19 @@ namespace JLChnToZ.VRC.VVMW {
             RequestSerialization();
         }
 
+        /// <summary>
+        /// Clear the performer if the given player ID matches the current performer.
+        /// </summary>
+        /// <param name="playerId">The player ID to check against the current performer.</param>
+        public void ClearPerformerByPlayerId(int playerId) {
+            if (!synced || performerId != (ushort)playerId) return;
+            PerformerId = 0;
+            var localPlayer = Networking.LocalPlayer;
+            if (Utilities.IsValid(localPlayer) && !Networking.IsOwner(gameObject))
+                Networking.SetOwner(localPlayer, gameObject);
+            RequestSerialization();
+        }
+
 #if COMPILER_UDONSHARP
 #if UDON_NETWORKING_UPDATED
         [NetworkCallable]
