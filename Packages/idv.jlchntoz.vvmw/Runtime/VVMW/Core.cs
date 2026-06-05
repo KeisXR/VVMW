@@ -35,6 +35,9 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, LocalizedLabel] VRCUrl defaultQuestUrl;
         [SerializeField, LocalizedLabel, Range(0, 255)] int autoPlayPlayerType = 1;
         [SerializeField, LocalizedLabel] bool synced = true;
+        [SerializeField, LocalizedLabel, Range(0, 255)] int lowLatencyOffPlayerType;
+        [SerializeField, LocalizedLabel, Range(0, 255)] int lowLatencyOnPlayerType;
+        [SerializeField, LocalizedLabel] bool reloadOnLowLatencyModeChanged = true;
         [SerializeField, LocalizedLabel] int totalRetryCount = 3, fallbackRetryCount = 1;
         [SerializeField, LocalizedLabel, Range(5, 20)] float retryDelay = 5.5F;
         [SerializeField, LocalizedLabel] float autoPlayDelay = 0;
@@ -45,6 +48,7 @@ namespace JLChnToZ.VRC.VVMW {
         byte localActivePlayer, lastActivePlayer;
         // 0: Idle, 1: Loading, 2: Playing, 3: Paused
         [UdonSynced] byte state;
+        [UdonSynced, FieldChangeCallback(nameof(LowLatencyMode))] bool lowLatencyMode;
 
         [SerializeField, UdonSynced, FieldChangeCallback(nameof(Loop))]
         bool loop;
@@ -132,6 +136,27 @@ namespace JLChnToZ.VRC.VVMW {
         /// </summary>
         /// <remarks>This indicates the video texture might be flipped.</remarks>
         public bool IsAVPro => Utilities.IsValid(activeHandler) && activeHandler.IsAvPro;
+
+        /// <summary>
+        /// Whether low latency mode is enabled globally for the instance.
+        /// </summary>
+        public bool LowLatencyMode {
+            get => lowLatencyMode;
+            set {
+                if (lowLatencyMode == value) return;
+                lowLatencyMode = value;
+                SendEvent("_OnLowLatencyModeChange");
+                if (afterFirstRun && reloadOnLowLatencyModeChanged && (!synced || Networking.IsOwner(gameObject)))
+                    ReloadForLowLatencyMode();
+            }
+        }
+
+        /// <summary>
+        /// Whether low latency mode has both player backends configured.
+        /// </summary>
+        public bool HasLowLatencyMode =>
+            IsValidPlayerIndex(lowLatencyOffPlayerType) &&
+            IsValidPlayerIndex(lowLatencyOnPlayerType);
 
         /// <summary>
         /// The current loaded URL.
@@ -282,7 +307,7 @@ namespace JLChnToZ.VRC.VVMW {
                     largestSupportIndex = i;
                 }
             }
-            return (byte)(largestSupport <= 0 ? 0 : largestSupportIndex + 1);
+            return ResolveLowLatencyPlayerType((byte)(largestSupport <= 0 ? 0 : largestSupportIndex + 1));
         }
 
         /// <summary>
@@ -325,6 +350,7 @@ namespace JLChnToZ.VRC.VVMW {
                 url = pcUrl;
                 playerType = (byte)autoPlayPlayerType;
             }
+            playerType = ResolveLowLatencyPlayerType(playerType);
 #if UNITY_ANDROID || UNITY_IOS
             if (!VRCUrl.IsNullOrEmpty(questUrl)) {
                 localUrl = questUrl;
@@ -357,6 +383,82 @@ namespace JLChnToZ.VRC.VVMW {
             LoadYTTL();
             LoadLRCLIB();
         }
+
+        /// <summary>
+        /// Toggle the global low latency mode and optionally reload the current AVPro URL.
+        /// </summary>
+        public void ToggleLowLatencyMode() => SetLowLatencyMode(!lowLatencyMode);
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _ToggleLowLatencyMode() => ToggleLowLatencyMode();
+
+        /// <summary>
+        /// Enable the global low latency mode.
+        /// </summary>
+        public void EnableLowLatencyMode() => SetLowLatencyMode(true);
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _EnableLowLatencyMode() => EnableLowLatencyMode();
+
+        /// <summary>
+        /// Disable the global low latency mode.
+        /// </summary>
+        public void DisableLowLatencyMode() => SetLowLatencyMode(false);
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _DisableLowLatencyMode() => DisableLowLatencyMode();
+
+        /// <summary>
+        /// Set the global low latency mode.
+        /// </summary>
+        /// <remarks>
+        /// The mode is synced by the core owner. If the current active backend is one of the
+        /// configured AVPro pair, the current URL is reloaded with the selected backend.
+        /// </remarks>
+        public void SetLowLatencyMode(bool value) {
+            if (lowLatencyMode == value) return;
+            if (synced && !Networking.IsOwner(gameObject))
+                Networking.SetOwner(Networking.LocalPlayer, gameObject);
+            LowLatencyMode = value;
+            if (synced && Networking.IsOwner(gameObject))
+                RequestSerialization();
+        }
+
+        bool ReloadForLowLatencyMode() {
+            if (!HasLowLatencyMode ||
+                VRCUrl.IsNullOrEmpty(localUrl) ||
+                !IsLowLatencyPairPlayer(localActivePlayer))
+                return false;
+            var playerType = ResolveLowLatencyPlayerType(localActivePlayer);
+            if (playerType == localActivePlayer) return false;
+            PlayUrl(localUrl, altUrl, playerType);
+            return true;
+        }
+
+        byte ResolveLowLatencyPlayerType(byte playerType) {
+            if (!HasLowLatencyMode || playerType == 0) return playerType;
+            if (lowLatencyMode && playerType == lowLatencyOffPlayerType)
+                return (byte)lowLatencyOnPlayerType;
+            if (!lowLatencyMode && playerType == lowLatencyOnPlayerType)
+                return (byte)lowLatencyOffPlayerType;
+            return playerType;
+        }
+
+        bool IsLowLatencyPairPlayer(byte playerType) =>
+            playerType == lowLatencyOffPlayerType ||
+            playerType == lowLatencyOnPlayerType;
+
+        bool IsValidPlayerIndex(int playerType) =>
+            playerType > 0 &&
+            Utilities.IsValid(playerHandlers) &&
+            playerType <= playerHandlers.Length &&
+            Utilities.IsValid(playerHandlers[playerType - 1]);
 
         /// <inheritdoc cref="PlayUrl(VRCUrl, VRCUrl, byte)"/>
         [Obsolete("Use PlayUrl(VRCUrl, VRCUrl, byte) instead.")]

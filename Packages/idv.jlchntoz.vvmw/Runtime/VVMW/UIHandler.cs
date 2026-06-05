@@ -26,6 +26,7 @@ namespace JLChnToZ.VRC.VVMW {
             nameof(_OnPerformerChange),
             nameof(_OnLyricsData),
             nameof(_OnLyricsLineChange),
+            nameof(_OnLowLatencyModeChange),
             nameof(_OnRangeLoopChange),
             nameof(_OnScreenSharedPropertiesChanged),
             nameof(_OnSpeedChange),
@@ -203,6 +204,9 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, LocalizedLabel] GameObject performerDisplay;
         [SerializeField, HideInInspector, Resolve(nameof(performerDisplay), NullOnly = false)] Text performerText;
         [SerializeField, HideInInspector, Resolve(nameof(performerDisplay), NullOnly = false)] TextMeshProUGUI performerTMPro;
+        [BindEvent(nameof(Button.onClick), nameof(_LowLatencyModeToggle))]
+        [SerializeField, LocalizedLabel] Button lowLatencyModeToggle;
+        [SerializeField, LocalizedLabel] GameObject lowLatencyModeOn, lowLatencyModeOff;
 
         [LocalizedHeader("HEADER:Speed_Adjustment_Controls")]
         [SerializeField, LocalizedLabel] GameObject speedControlsRoot;
@@ -606,6 +610,7 @@ namespace JLChnToZ.VRC.VVMW {
                 performanceModeToggle.interactable = unlocked;
                 _OnPerformerChange();
             }
+            UpdateLowLatencyMode();
             if (Utilities.IsValid(abLoopSlider)) abLoopSliderObject.SetActive(isRangeLooping && unlocked);
             UpdateLyricsPlaybackStatus();
         }

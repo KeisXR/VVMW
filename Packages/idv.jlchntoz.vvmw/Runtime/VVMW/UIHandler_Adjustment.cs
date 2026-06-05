@@ -109,5 +109,26 @@ namespace JLChnToZ.VRC.VVMW {
             if (Utilities.IsValid(performanceModeSelf)) performanceModeSelf.SetActive(isSelf);
             if (Utilities.IsValid(performanceModeOthers)) performanceModeOthers.SetActive(isOthers);
         }
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _LowLatencyModeToggle() => core.ToggleLowLatencyMode();
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _OnLowLatencyModeChange() => UpdateLowLatencyMode();
+
+        void UpdateLowLatencyMode() {
+            bool available = core.HasLowLatencyMode;
+            bool enabled = available && core.LowLatencyMode;
+            if (Utilities.IsValid(lowLatencyModeToggle))
+                lowLatencyModeToggle.interactable = wasUnlocked && available;
+            if (Utilities.IsValid(lowLatencyModeOn))
+                lowLatencyModeOn.SetActive(enabled);
+            if (Utilities.IsValid(lowLatencyModeOff))
+                lowLatencyModeOff.SetActive(available && !enabled);
+        }
     }
 }
