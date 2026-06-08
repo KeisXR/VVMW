@@ -33,7 +33,7 @@ namespace VVMW.ThirdParties.Yttl {
             isDefineFileReady = true;
             if (Utilities.IsValid(postDefineFileLoadUrls))
                 foreach (var url in postDefineFileLoadUrls) {
-                    if (!parser.TryGetSupportedHost(url.Get(), out var _discard)) {
+                    if (!parser.TryGetSupportedHost(NormalizeYoutubeShortUrl(url.Get()), out var _discard)) {
                         Debug.LogWarning("[YTTL] Unsupported host");
                         continue;
                     }
@@ -97,13 +97,8 @@ namespace VVMW.ThirdParties.Yttl {
         }
 
         VRCUrl GetRequestUrl(VRCUrl url, out string requestUrlStr) {
-            requestUrlStr = url.Get();
-            var normalizedUrlStr = NormalizeYoutubeShortUrl(requestUrlStr);
-            if (normalizedUrlStr == requestUrlStr ||
-                !VRCUrl.TryCreateAllowlistedVRCUrl(normalizedUrlStr, out var requestUrl))
-                return url;
-            requestUrlStr = normalizedUrlStr;
-            return requestUrl;
+            requestUrlStr = NormalizeYoutubeShortUrl(url.Get());
+            return url;
         }
 
         string NormalizeYoutubeShortUrl(string urlStr) {
@@ -139,7 +134,7 @@ namespace VVMW.ThirdParties.Yttl {
         public override void OnStringLoadSuccess(IVRCStringDownload result) {
             var data = result.Result;
 
-            var url = result.Url.Get();
+            var url = NormalizeYoutubeShortUrl(result.Url.Get());
 
             if (!parser.TryGetSupportedHost(url, out var host)) {
                 Debug.LogWarning("[YTTL] Unsupported host");
