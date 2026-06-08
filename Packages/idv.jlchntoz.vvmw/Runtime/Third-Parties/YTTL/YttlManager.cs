@@ -43,13 +43,13 @@ namespace VVMW.ThirdParties.Yttl {
         }
 
         public void LoadData(VRCUrl url, UdonSharpBehaviour listener) {
-            var urlStr = url.Get();
+            var requestUrl = GetRequestUrl(url, out var urlStr);
 
             if (Utilities.IsValid(cache) &&
                 cache.TryGetValue(urlStr, TokenType.DataDictionary, out var cacheToken)) {
                 Debug.Log("[YTTL] Found cache");
                 GetAllData(cacheToken.DataDictionary, out var author, out var title, out var viewCount, out var description);
-                listener.SetProgramVariable(nameof(url), url);
+                listener.SetProgramVariable(nameof(url), requestUrl);
                 listener.SetProgramVariable(nameof(author), author);
                 listener.SetProgramVariable(nameof(title), title);
                 listener.SetProgramVariable(nameof(viewCount), viewCount);
@@ -81,10 +81,10 @@ namespace VVMW.ThirdParties.Yttl {
                     int length = postDefineFileLoadUrls.Length;
                     var newQueue = new VRCUrl[length + 1];
                     Array.Copy(postDefineFileLoadUrls, newQueue, length);
-                    newQueue[length] = url;
+                    newQueue[length] = requestUrl;
                     postDefineFileLoadUrls = newQueue;
                 } else
-                    postDefineFileLoadUrls = new VRCUrl[] { url };
+                    postDefineFileLoadUrls = new VRCUrl[] { requestUrl };
                 return;
             }
 
@@ -93,7 +93,47 @@ namespace VVMW.ThirdParties.Yttl {
                 return;
             }
 
-            VRCStringDownloader.LoadUrl(url, (IUdonEventReceiver)this);
+            VRCStringDownloader.LoadUrl(requestUrl, (IUdonEventReceiver)this);
+        }
+
+        VRCUrl GetRequestUrl(VRCUrl url, out string requestUrlStr) {
+            requestUrlStr = url.Get();
+            var normalizedUrlStr = NormalizeYoutubeShortUrl(requestUrlStr);
+            if (normalizedUrlStr == requestUrlStr ||
+                !VRCUrl.TryCreateAllowlistedVRCUrl(normalizedUrlStr, out var requestUrl))
+                return url;
+            requestUrlStr = normalizedUrlStr;
+            return requestUrl;
+        }
+
+        string NormalizeYoutubeShortUrl(string urlStr) {
+            if (string.IsNullOrEmpty(urlStr)) return urlStr;
+            int schemeIndex = urlStr.IndexOf("://");
+            if (schemeIndex < 0) return urlStr;
+            int hostStart = schemeIndex + 3;
+            int pathStart = urlStr.IndexOf("/", hostStart);
+            if (pathStart < 0 || pathStart + 1 >= urlStr.Length) return urlStr;
+
+            var host = urlStr.Substring(hostStart, pathStart - hostStart);
+            int portIndex = host.IndexOf(":");
+            if (portIndex >= 0) host = host.Substring(0, portIndex);
+            if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+                host = host.Substring(4);
+            if (!host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase))
+                return urlStr;
+
+            int idStart = pathStart + 1;
+            int idEnd = urlStr.Length;
+            int queryIndex = urlStr.IndexOf("?", idStart);
+            if (queryIndex >= 0 && queryIndex < idEnd) idEnd = queryIndex;
+            int hashIndex = urlStr.IndexOf("#", idStart);
+            if (hashIndex >= 0 && hashIndex < idEnd) idEnd = hashIndex;
+            int slashIndex = urlStr.IndexOf("/", idStart);
+            if (slashIndex >= 0 && slashIndex < idEnd) idEnd = slashIndex;
+            if (idEnd <= idStart) return urlStr;
+
+            var videoId = urlStr.Substring(idStart, idEnd - idStart);
+            return $"https://www.youtube.com/watch?v={videoId}";
         }
 
         public override void OnStringLoadSuccess(IVRCStringDownload result) {

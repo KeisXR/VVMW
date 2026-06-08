@@ -51,7 +51,7 @@ namespace JLChnToZ.VRC.VVMW {
         string Title {
             get => title;
             set {
-                if (hasCustomTitle || !url.Equals(localUrl)) return;
+                if (hasCustomTitle || !IsYttlDataForLocalUrl()) return;
                 title = value;
             }
         }
@@ -59,7 +59,7 @@ namespace JLChnToZ.VRC.VVMW {
         string Author {
             get => author;
             set {
-                if (hasCustomTitle || !url.Equals(localUrl)) return;
+                if (hasCustomTitle || !IsYttlDataForLocalUrl()) return;
                 author = value;
             }
         }
@@ -67,7 +67,7 @@ namespace JLChnToZ.VRC.VVMW {
         string ViewCount {
             get => viewCount;
             set {
-                if (hasCustomTitle || !url.Equals(localUrl)) return;
+                if (hasCustomTitle || !IsYttlDataForLocalUrl()) return;
                 viewCount = value;
             }
         }
@@ -75,7 +75,7 @@ namespace JLChnToZ.VRC.VVMW {
         string Description {
             get => description;
             set {
-                if (hasCustomTitle || !url.Equals(localUrl)) return;
+                if (hasCustomTitle || !IsYttlDataForLocalUrl()) return;
                 description = value;
             }
         }
@@ -117,13 +117,93 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void LoadYTTL() {
-            if (!Utilities.IsValid(yttl) || hasCustomTitle || url.Equals(localUrl)) return;
+            if (!Utilities.IsValid(yttl) || hasCustomTitle || IsYttlDataForLocalUrl()) return;
             author = "";
             title = "";
             viewCount = "";
             description = "";
             if (Utilities.IsValid(localUrl))
                 yttl.LoadData(localUrl, this);
+        }
+
+        bool IsYttlDataForLocalUrl() {
+            if (url.Equals(localUrl)) return true;
+            if (VRCUrl.IsNullOrEmpty(url) || VRCUrl.IsNullOrEmpty(localUrl)) return false;
+            return TryGetYoutubeVideoId(url.Get(), out var urlVideoId) &&
+                TryGetYoutubeVideoId(localUrl.Get(), out var localVideoId) &&
+                urlVideoId == localVideoId;
+        }
+
+        bool TryGetYoutubeVideoId(string urlStr, out string videoId) {
+            videoId = string.Empty;
+            if (string.IsNullOrEmpty(urlStr)) return false;
+            int schemeIndex = urlStr.IndexOf("://");
+            if (schemeIndex < 0) return false;
+
+            int hostStart = schemeIndex + 3;
+            int pathStart = urlStr.IndexOf("/", hostStart);
+            int queryStart = urlStr.IndexOf("?", hostStart);
+            int hostEnd = pathStart >= 0 ? pathStart : queryStart >= 0 ? queryStart : urlStr.Length;
+            var host = urlStr.Substring(hostStart, hostEnd - hostStart);
+            int portIndex = host.IndexOf(":");
+            if (portIndex >= 0) host = host.Substring(0, portIndex);
+            if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase))
+                host = host.Substring(4);
+
+            if (host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase))
+                return TryGetPathSegment(urlStr, pathStart, out videoId);
+
+            if (!host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (TryGetQueryValue(urlStr, "v=", hostEnd, out videoId))
+                return true;
+
+            int shortsIndex = pathStart >= 0 ?
+                urlStr.IndexOf("/shorts/", pathStart, StringComparison.OrdinalIgnoreCase) : -1;
+            if (shortsIndex >= 0)
+                return TryGetPathSegment(urlStr, shortsIndex + "/shorts".Length, out videoId);
+
+            return false;
+        }
+
+        bool TryGetPathSegment(string urlStr, int pathStart, out string segment) {
+            segment = string.Empty;
+            if (pathStart < 0 || pathStart + 1 >= urlStr.Length) return false;
+            int segmentStart = pathStart + 1;
+            int segmentEnd = urlStr.Length;
+            int slashIndex = urlStr.IndexOf("/", segmentStart);
+            if (slashIndex >= 0 && slashIndex < segmentEnd) segmentEnd = slashIndex;
+            int queryIndex = urlStr.IndexOf("?", segmentStart);
+            if (queryIndex >= 0 && queryIndex < segmentEnd) segmentEnd = queryIndex;
+            int hashIndex = urlStr.IndexOf("#", segmentStart);
+            if (hashIndex >= 0 && hashIndex < segmentEnd) segmentEnd = hashIndex;
+            if (segmentEnd <= segmentStart) return false;
+            segment = urlStr.Substring(segmentStart, segmentEnd - segmentStart);
+            return true;
+        }
+
+        bool TryGetQueryValue(string urlStr, string key, int startIndex, out string value) {
+            value = string.Empty;
+            int queryIndex = urlStr.IndexOf("?", startIndex);
+            if (queryIndex < 0 || queryIndex + 1 >= urlStr.Length) return false;
+
+            int keyIndex = urlStr.IndexOf(key, queryIndex + 1, StringComparison.OrdinalIgnoreCase);
+            while (keyIndex >= 0) {
+                if (keyIndex == queryIndex + 1 || urlStr[keyIndex - 1] == '&') {
+                    int valueStart = keyIndex + key.Length;
+                    int valueEnd = urlStr.Length;
+                    int ampIndex = urlStr.IndexOf("&", valueStart);
+                    if (ampIndex >= 0 && ampIndex < valueEnd) valueEnd = ampIndex;
+                    int hashIndex = urlStr.IndexOf("#", valueStart);
+                    if (hashIndex >= 0 && hashIndex < valueEnd) valueEnd = hashIndex;
+                    if (valueEnd <= valueStart) return false;
+                    value = urlStr.Substring(valueStart, valueEnd - valueStart);
+                    return true;
+                }
+                keyIndex = urlStr.IndexOf(key, keyIndex + key.Length, StringComparison.OrdinalIgnoreCase);
+            }
+            return false;
         }
     }
 }
