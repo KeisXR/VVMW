@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## 1.7.5 - 2026-06-04
+### Fixed
+- Auto adjust scaling flow
+
+### Chaged
+- No longer hides speed adjustment buttons when locked.
+- Moved active region settings in inspector.
+- Removed "Add screen target" and "Add audio source" input fields, now can just drop it anywhere within the component inspector.
+- Now auto selects the first playlist if enabled auto play but selecting queue list.
+- Enabling "Auto volume down on out of range" checkbox will ask before auto spawning an active region.
+
+## 1.7.4 - 2026-05-24
+### Fixed
+- Speed control/playback progress shift control incorrectly hide/unhide when locked.
+- Unify full-width/half-width punctuations for editor Chinese localizations. ([#85](https://github.com/JLChnToZ/VVMW/issues/85))
+
 ## 1.7.4-beta.1 - 2026-05-18
 ### Added
 - Game object active state can be considered if player is triggering an active region.
