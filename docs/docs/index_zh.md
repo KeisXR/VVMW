@@ -232,7 +232,7 @@ VizVid 用螢幕，可與控制器分開放置。
     * **其他**  
         * **URL 輸入篩選器**  
         URL 過濾設定。  
-        可參考該 [Udon 腳本](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/idv.jlchntoz.vvmw/Runtime/VVMW/InputFilterBase.cs)，基於 Inheritance 進行實作。  
+        可參考該 [Udon 腳本](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/com.github.keisxr.vvmw-lyrics/Runtime/VVMW/InputFilterBase.cs)，基於 Inheritance 進行實作。  
         * **全域預設材質**  
         當 VizVid 沒有畫面時，所有畫面預設顯示的材質。  
         可於每個 `Screen Configurator` 各別更改。  

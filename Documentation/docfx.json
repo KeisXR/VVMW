@@ -25,7 +25,7 @@
                 "files": [
                     "toc.yml",
                     "../README.md",
-                    "../Packages/idv.jlchntoz.vvmw/*.md"
+                    "../Packages/com.github.keisxr.vvmw-lyrics/*.md"
                 ]
             },
             {
@@ -39,7 +39,7 @@
         "resource": [
             {
                 "files": [
-                    "../Packages/idv.jlchntoz.vvmw/.tutorial/**"
+                    "../Packages/com.github.keisxr.vvmw-lyrics/.tutorial/**"
                 ]
             }
         ],

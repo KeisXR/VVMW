@@ -238,7 +238,7 @@ VizVid のデフォルト値を設定します。
     * **その他 (Others)**  
         * **URL 入力フィルター**  
         URL のフィルタリング設定です。  
-        この [Udon スクリプト](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/idv.jlchntoz.vvmw/Runtime/VVMW/InputFilterBase.cs)を参考し、継承での応用が可能です。  
+        この [Udon スクリプト](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/com.github.keisxr.vvmw-lyrics/Runtime/VVMW/InputFilterBase.cs)を参考し、継承での応用が可能です。  
         * **グローバルデフォルトテクスチャ**  
         映像が流れていない時に表示されるデフォルトのマテリアルです。各 `Screen Configurator` ごとに個別に変更することも可能です。  
         * **同期**  

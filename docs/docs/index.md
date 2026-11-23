@@ -238,7 +238,7 @@ The update interval for Realtime Global Illumination. Set to `0` to disable.
 * **Others**  
     * **URL Input Filter**  
 URL filtering settings.  
-Implementation can be based on inheritance by referring to this [Udon Script](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/idv.jlchntoz.vvmw/Runtime/VVMW/InputFilterBase.cs).  
+Implementation can be based on inheritance by referring to this [Udon Script](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/com.github.keisxr.vvmw-lyrics/Runtime/VVMW/InputFilterBase.cs).  
     * **Global Default Texture**  
 The texture displayed by default on all screens when VizVid has no video content.  
 This can be changed individually in each `Screen Configurator`.  

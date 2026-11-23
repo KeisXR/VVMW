@@ -300,8 +300,8 @@
       "source": "embedded",
       "dependencies": {}
     },
-    "idv.jlchntoz.vvmw": {
-      "version": "file:idv.jlchntoz.vvmw",
+    "com.github.keisxr.vvmw-lyrics": {
+      "version": "file:com.github.keisxr.vvmw-lyrics",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}

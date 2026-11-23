@@ -57,7 +57,7 @@ You may use following methods:
   ```powershell
   cd path/to/your/world/project/folder
   vrc-get repo add https://xtlcdn.github.io/vpm/index.json
-  vrc-get install idv.jlchntoz.vvmw
+  vrc-get install com.github.keisxr.vvmw-lyrics
   ```
 - Via Booth: [Click here](https://xtl.booth.pm/items/5056077).
 - Via GitHub Releases: [Click here](https://github.com/JLChnToZ/VVMW/releases/latest).
@@ -84,7 +84,7 @@ For any issues, please contact me on [Discord server](https://discord.gg/fkDueQM
 - **[All Other GitHub Contributors](https://github.com/JLChnToZ/VVMW/graphs/contributors)**
 
 ## License
-[MIT](./Packages/idv.jlchntoz.vvmw/LICENSE)
+[MIT](./Packages/com.github.keisxr.vvmw-lyrics/LICENSE)
 
 > [!IMPORTANT]
 > **This project is licensed under the MIT License — it is NOT public domain, and it is NOT CC0.**

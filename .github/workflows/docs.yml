@@ -11,7 +11,7 @@ on:
       - 'Packages/manifest.json'
       - 'Packages/packages-lock.json'
       - 'Packages/vpm-manifest.json'
-      - 'Packages/idv.jlchntoz.vvmw/**'
+      - 'Packages/com.github.keisxr.vvmw-lyrics/**'
       - 'ProjectSettings/ProjectVersion.txt'
 
 permissions:
