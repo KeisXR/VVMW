@@ -55,7 +55,8 @@ namespace JLChnToZ.VRC.VVMW {
         void _OnLyricsData() {
             if (!afterFirstRun || !Utilities.IsValid(core) || !Utilities.IsValid(lyricsPanelRoot)) return;
             var state = core.LyricsState;
-            bool showSynced = state == Core.LYRICS_SYNCED;
+            // The connection failure is shown where the lyrics would be, so nobody mistakes it for "no lyrics".
+            bool showSynced = state == Core.LYRICS_SYNCED || state == Core.LYRICS_UNREACHABLE;
             lyricsPanelRoot.SetActive(true);
             if (Utilities.IsValid(lyricsSyncedRoot)) lyricsSyncedRoot.SetActive(showSynced);
             if (Utilities.IsValid(lyricsPlainRoot)) lyricsPlainRoot.SetActive(false);
@@ -89,6 +90,12 @@ namespace JLChnToZ.VRC.VVMW {
                         SetText(lyricsStatusText, lyricsStatusTMPro, core.LyricsStatus);
                     else
                         SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, "LyricsError");
+                    break;
+                case Core.LYRICS_UNREACHABLE:
+                    SetText(lyricsPreviousText, lyricsPreviousTMPro, "");
+                    SetLocalizedText(lyricsCurrentText, lyricsCurrentTMPro, "LyricsUnreachable");
+                    SetText(lyricsNextText, lyricsNextTMPro, core.LyricsStatus);
+                    SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, "LyricsError");
                     break;
                 default:
                     SetLocalizedText(lyricsStatusText, lyricsStatusTMPro, core.State > 0 && !core.HasLyricsSource ? "LyricsNoSource" : "Ready");

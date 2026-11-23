@@ -1,6 +1,6 @@
 # LRCLIB Lyrics Integration Status
 
-最終更新: 2026-05-30
+最終更新: 2026-11-23
 
 このドキュメントは、VizVid lyrics fork (`com.github.keisxr.vvmw-lyrics`) に対して行ったLRCLIB歌詞連携まわりの実装状況と、パッケージID変更に伴う移植対応をまとめる。
 
@@ -106,6 +106,21 @@ UI向けには以下の3行を公開している。
 
 現時点ではVRChat側で報告内容をPOSTできないため、報告URLへのGETアクセスをサーバー側で「この歌詞は違う」イベントとして扱う前提。
 
+### 歌詞リレー（代表取得）
+
+`Runtime/VVMW/LyricsRelay.cs`。`Core.lyricsRelay` に割り当てると、歌詞サーバーへのリクエストを1曲につき1人分に減らす。未割り当て、または `Core.synced` がオフのときは従来どおり各自が取得する。
+
+- 動画を再生した人（Core のオーナー）が代表として取得し、返ってきたJSONを同期する。他の人と後から入った人は同期された結果を解析するだけでサーバーにアクセスしない。
+- 同期するJSONは `syncedLyrics` があれば `plainLyrics` を落として縮める。
+- 代表がサーバーに到達できなかった場合（HTTPステータスなし: DNS失敗・接続拒否など、または `fetchTimeout` 秒間進捗なし: Untrusted URL で無応答など）は、まだ試していないプレイヤーのうち最小IDの人に交代する。
+- サーバーがHTTPエラーを返した場合は到達できているので交代せず、そのエラーを全員に配る。
+- 誰も到達できなかった場合は `LYRICS_UNREACHABLE` になり、UIは歌詞の現在行に `LyricsUnreachable`、次行に最後のエラー内容を表示する。
+- 代表が取得中に退出した場合は次の人がすぐ引き継ぐ。誰も取得を始めない場合は `claimTimeout` 秒後に最小IDの人が取得する。
+- リレーが別のキー（Quest用URLの動画IDなど）で埋まっていて決まらない場合は、`claimTimeout + fetchTimeout` 秒後に各自で取得する。
+- 取得するとリレーのオーナーが移るため、Core と同じ GameObject には置かない（動画同期のオーナーを動かさないため）。
+
+到達不可の判定は `IVRCStringDownload.ErrorCode` が 100〜599 の範囲外であることで行っている。到達不可時に VRChat が実際に返す値は公式ドキュメントに記載がないため、実機での確認が必要。
+
 ## Runtime: Frontend / Playlist
 
 主な実装ファイル:
@@ -125,6 +140,27 @@ UI向けには以下の3行を公開している。
 再生対象が決まったタイミングで `SetCoreLyricsSource()` を呼び、該当entryの歌詞URLと報告URLを `Core` に渡す。再生停止、queue遷移、URL入力などでplaylist entryと紐づかない再生に切り替わる場合は `_ClearLyricsSource()` で歌詞表示を消す。
 
 URL入力などのplaylist外再生では、`dynamicLyricsMediaUrlPrefix` に一致する再生URLからslot番号を抽出し、`dynamicLyricsRequestUrlPool[slot]` / `dynamicLyricsReportUrlPool[slot]` を `Core` に渡す。通常のYouTube URLをVRC内で任意のlyrics URLへ動的変換することはできないため、playlist外で歌詞を出す場合はNomSeekの `https://api.u2b.cx/vrcurl/{pool}/{slot}` 形式の再生URLに対応する。
+
+### 動画IDフォールバック (URL直接入力)
+
+専用の歌詞URLを持たない再生 (URL欄への直接入力、歌詞URL未設定のplaylist項目、default URLなど) では、`Core` が再生中のURLからYouTube動画ID (11文字) を取り出し、事前生成した固定URLプール経由でサーバーへ伝える。UdonはVRCUrlを実行時に組み立てられないため、IDを2文字ずつに分けて「その2文字に対応する固定URL」へ順にアクセスする。
+
+- 対応URL: `youtube.com/watch?v=`、`youtu.be/`、`/shorts/`、`/live/`、`/embed/`、`/v/`、`youtube-nocookie.com`。前段にresolverが付いたURLでも、文字列中にこれらが含まれていれば拾う
+- プール: `Core.lyricsVideoIdUrlPool` (20,544本) と `Core.lyricsVideoIdReportUrl`。Core inspectorの歌詞設定にある「URL プールを生成」で作る。未生成ならこのフォールバックは動かず、従来どおり歌詞なしになる
+- 各clientが自分の再生URLからIDを求めるため、同期変数は増やしていない
+- 歌詞URLやNomSeek slotがある再生はそちらが優先される
+
+生成されるURL (`{c}` は `A-Z a-z 0-9 - _` の64文字):
+
+```text
+lyricsVideoIdUrlPool[chunk * 4096 + i * 64 + j] = {endpoint}/yt/{pool}/id/{chunk}/{c_i}{c_j}   (chunk = 0..4)
+lyricsVideoIdUrlPool[5 * 4096 + i]              = {endpoint}/yt/{pool}/id/5/{c_i}
+lyricsVideoIdReportUrl                          = {endpoint}/yt/{pool}/report
+```
+
+clientはchunk 0から順に1本ずつ、応答を待ってから次を送る。応答JSONの `videoId` が自分の動画IDと一致した時点でそれを歌詞として採用し、残りのchunkは送らない。一致しなければ次のchunkへ進み、6本送っても一致しなければ1回だけ最初からやり直し、それでも駄目なら `LYRICS_NOT_FOUND` にする。
+
+`VRCStringDownloader` は5秒に1本の制限があるため、サーバーが未知の動画は初回のみ表示まで最大30秒程度かかる。サーバーが早い段階で答えられれば5秒程度で出る。
 
 ## Runtime: UI
 
@@ -176,8 +212,9 @@ URL入力などのplaylist外再生では、`dynamicLyricsMediaUrlPrefix` に一
 
 NomSeek VRCURL slot向けに以下の生成補助を追加している。
 
-- `NomSeek Pool`: pool id。未入力時はscene名から生成
+- `NomSeek Pool`: NomSeek側のpool id。空のままでは生成できない
 - `Max Slot`: 生成する最大slot番号。`0..Max Slot` のURL配列を作る
+- `Detect`: `Assets/Nomlas/NomSeek/VRCURLSetter.prefab` からpool idと最大slot番号を読み取る
 - `Generate Dynamic Lyrics Pool`: NomSeekのVRCURL slotと `lrcserve` の `/nomseek` endpointを対応付ける
 
 生成後の設定値:
@@ -242,6 +279,24 @@ NomSeek VizVid Connector側もfork後のpackage/asmdefを参照するように�
 - `GET /lrc/nomseek/{pool}/{slot}/lyrics`
 - `GET /lrc/nomseek/{pool}/{slot}/report`
 
+動画IDフォールバック用 (2026-11-23に実装、`curl` で動作確認済み):
+
+- `GET /lrc/yt/{pool}/id/{chunk}/{chars}`
+- `GET /lrc/yt/{pool}/report`
+
+実装者向けの詳しい仕様 (状態の持ち方、レスポンス例、リクエスト列の例、受け入れ確認) は [lrcserve-video-id-spec.md](lrcserve-video-id-spec.md) にまとめた。以下はその要約。
+
+`/yt/.../id/` に求められる挙動:
+
+- clientごと (接続元IP + pool) に、受け取ったchunkを順に溜める。`chunk = 0` を受けたらそのclientの分を捨てて最初から溜め直す
+- 歌詞を返すときは、既存のレスポンス項目に加えて `videoId` (対象の11文字) を必ず含める。clientは `videoId` が自分のIDと完全一致したときだけ採用するので、推測で返して外れても誤表示にはならない
+- 6 chunk揃ったら `https://www.youtube.com/watch?v={id}` として既存の検索処理に回し、結果を `videoId` 付きで返す。歌詞が無い場合も `videoId` を付けて `plainLyrics` / `syncedLyrics` を空で返すと、clientは即座に「歌詞なし」と確定できる
+- 途中のchunkでも、溜まった先頭部分に一致する既知の動画 (同じinstanceの他clientが直前に問い合わせた動画、NomSeek経由で見た動画など) があれば、その歌詞を先に返してよい。これが効くと2人目以降は1本目で歌詞が出る
+- まだ答えられないときは `{}` などの `videoId` を含まないJSON、または404を返す。clientは次のchunkへ進む。404以外のエラーは取得失敗として扱われる
+- `/yt/{pool}/report` は、そのclientに最後に返した動画への「この歌詞は違う」報告として扱う
+
+同じIPから複数人が別々の動画を同時に送ると溜めたchunkが混ざりうるが、同じinstanceでは全員が同じ動画を再生しているため実害は出にくい。混ざった場合もclient側の `videoId` 照合で弾かれ、やり直しになる。
+
 自前 `/vrcurl` slot案はUXが複雑になったためUnity側の導線から撤回した。現行のplaylist外再生対応はNomSeekのVRCURL slotに乗り、歌詞取得・誤り報告だけを `lrcserve` の `/nomseek` endpointで処理する。
 
 ### フォールバック方針
@@ -258,6 +313,7 @@ NomSeek VizVid Connector側もfork後のpackage/asmdefを参照するように�
 - Lyrics Panel prefab生成結果の確認
 - ClientSim / VRChat Build & Testでの再生中歌詞更新確認
 - NomSeek VRCURL slot URL再生時のVRChat Client実地確認
+- 動画IDフォールバックのVRChat Client実地確認 (C# / UdonSharpのcompileは確認済み)
 
 直近のUnity batchmode compileは、対象World projectが既にUnityで開かれていたため実行できなかった。
 

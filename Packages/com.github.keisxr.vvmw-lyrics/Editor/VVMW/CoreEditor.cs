@@ -53,6 +53,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         SerializedProperty lyricsOffsetProperty;
         SerializedProperty maxSyncedLyricsLinesProperty;
         SerializedProperty lyricsUpdateIntervalProperty;
+        SerializedProperty lyricsVideoIdUrlPoolProperty;
+        SerializedProperty lyricsVideoIdReportUrlProperty;
+        SerializedProperty lyricsRelayProperty;
+        string lyricsVideoIdEndpoint, lyricsVideoIdPoolId;
         SerializedProperty defaultTextureProperty;
         SerializedProperty screenTargetsProperty;
         SerializedProperty screenTargetModesProperty;
@@ -118,6 +122,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             lyricsOffsetProperty = serializedObject.FindProperty("lyricsOffset");
             maxSyncedLyricsLinesProperty = serializedObject.FindProperty("maxSyncedLyricsLines");
             lyricsUpdateIntervalProperty = serializedObject.FindProperty("lyricsUpdateInterval");
+            lyricsVideoIdUrlPoolProperty = serializedObject.FindProperty("lyricsVideoIdUrlPool");
+            lyricsVideoIdReportUrlProperty = serializedObject.FindProperty("lyricsVideoIdReportUrl");
+            lyricsRelayProperty = serializedObject.FindProperty("lyricsRelay");
+            ReadLyricsVideoIdPoolSettings();
             screenTargetsProperty = serializedObject.FindProperty("screenTargets");
             screenTargetModesProperty = serializedObject.FindProperty("screenTargetModes");
             screenTargetIndecesProperty = serializedObject.FindProperty("screenTargetIndeces");
@@ -410,7 +418,74 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                     EditorGUILayout.PropertyField(lyricsOffsetProperty);
                     EditorGUILayout.PropertyField(maxSyncedLyricsLinesProperty);
                     EditorGUILayout.PropertyField(lyricsUpdateIntervalProperty);
+                    EditorGUILayout.PropertyField(lyricsRelayProperty);
+                    DrawLyricsVideoIdPool();
                 }
+        }
+
+        void DrawLyricsVideoIdPool() {
+            const string key = "JLChnToZ.VRC.VVMW.Core.lyricsVideoIdUrlPool";
+            EditorGUILayout.LabelField(i18n.GetLocalizedContent(key));
+            using (new EditorGUI.IndentLevelScope()) {
+                int poolSize = lyricsVideoIdUrlPoolProperty.arraySize;
+                EditorGUILayout.HelpBox(
+                    poolSize >= Core.LYRICS_VIDEO_ID_POOL_SIZE ?
+                        string.Format(i18n.GetOrDefault($"{key}:generated_message"), poolSize) :
+                        i18n.GetOrDefault($"{key}:empty_message"),
+                    MessageType.Info
+                );
+                lyricsVideoIdEndpoint = EditorGUILayout.TextField(i18n.GetLocalizedContent($"{key}:endpoint"), lyricsVideoIdEndpoint);
+                lyricsVideoIdPoolId = EditorGUILayout.TextField(i18n.GetLocalizedContent($"{key}:pool"), lyricsVideoIdPoolId);
+                using (new EditorGUILayout.HorizontalScope()) {
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button(i18n.GetOrDefault($"{key}:generate"), GUILayout.ExpandWidth(false)))
+                        GenerateLyricsVideoIdPool();
+                    using (new EditorGUI.DisabledScope(poolSize == 0))
+                        if (GUILayout.Button(i18n.GetOrDefault($"{key}:clear"), GUILayout.ExpandWidth(false))) {
+                            lyricsVideoIdUrlPoolProperty.arraySize = 0;
+                            lyricsVideoIdReportUrlProperty.FindPropertyRelative("url").stringValue = string.Empty;
+                        }
+                }
+            }
+        }
+
+        // The pool only stores finished URLs, so the server and pool ID shown here are read back from its first entry.
+        void ReadLyricsVideoIdPoolSettings() {
+            lyricsVideoIdEndpoint = PlayListEditorWindow.DefaultLyricsEndpoint;
+            lyricsVideoIdPoolId = PlayListEditorWindow.GetDefaultLyricsPoolId(target as Component);
+            if (lyricsVideoIdUrlPoolProperty == null || lyricsVideoIdUrlPoolProperty.arraySize == 0) return;
+            var url = lyricsVideoIdUrlPoolProperty.GetArrayElementAtIndex(0).FindPropertyRelative("url").stringValue;
+            if (string.IsNullOrEmpty(url)) return;
+            int poolStart = url.LastIndexOf("/yt/");
+            int poolEnd = url.LastIndexOf("/id/");
+            if (poolStart <= 0 || poolEnd <= poolStart + 4) return;
+            lyricsVideoIdEndpoint = url.Substring(0, poolStart);
+            lyricsVideoIdPoolId = url.Substring(poolStart + 4, poolEnd - poolStart - 4);
+        }
+
+        // One URL for every chunk of a video ID: five chunks of two characters, then the last character on its own.
+        // The order must match how Core picks an entry: chunk * LYRICS_VIDEO_ID_CHUNK_SIZE + first * 64 + second.
+        void GenerateLyricsVideoIdPool() {
+            var endpoint = (lyricsVideoIdEndpoint ?? string.Empty).Trim().TrimEnd('/');
+            if (endpoint.Length == 0) endpoint = PlayListEditorWindow.DefaultLyricsEndpoint;
+            var poolId = string.IsNullOrWhiteSpace(lyricsVideoIdPoolId) ?
+                PlayListEditorWindow.GetDefaultLyricsPoolId(target as Component) :
+                PlayListEditorWindow.NormalizeLyricsPoolId(lyricsVideoIdPoolId);
+            lyricsVideoIdEndpoint = endpoint;
+            lyricsVideoIdPoolId = poolId;
+            const string chars = Core.LYRICS_VIDEO_ID_CHARS;
+            int lastChunk = Core.LYRICS_VIDEO_ID_CHUNKS - 1;
+            int index = 0;
+            lyricsVideoIdUrlPoolProperty.arraySize = Core.LYRICS_VIDEO_ID_POOL_SIZE;
+            for (int chunk = 0; chunk < lastChunk; chunk++)
+                for (int i = 0; i < chars.Length; i++)
+                    for (int j = 0; j < chars.Length; j++)
+                        lyricsVideoIdUrlPoolProperty.GetArrayElementAtIndex(index++).FindPropertyRelative("url").stringValue =
+                            $"{endpoint}/yt/{poolId}/id/{chunk}/{chars[i]}{chars[j]}";
+            for (int i = 0; i < chars.Length; i++)
+                lyricsVideoIdUrlPoolProperty.GetArrayElementAtIndex(index++).FindPropertyRelative("url").stringValue =
+                    $"{endpoint}/yt/{poolId}/id/{lastChunk}/{chars[i]}";
+            lyricsVideoIdReportUrlProperty.FindPropertyRelative("url").stringValue = $"{endpoint}/yt/{poolId}/report";
         }
 
         void DrawVideoSettings() {

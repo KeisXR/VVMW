@@ -34,7 +34,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         [NonSerialized] PlayList selectedPlayList;
         [NonSerialized] bool isDirty;
         Vector2 playListViewScrollPosition, playListEntryViewScrollPosition;
-        const string DefaultLyricsEndpoint = "https://k3isd.net/lrc";
+        internal const string DefaultLyricsEndpoint = "https://k3isd.net/lrc";
         const string NomSeekVrcUrlBase = "https://api.u2b.cx/vrcurl";
         const string NomSeekVrcUrlSetterPath = "Assets/Nomlas/NomSeek/VRCURLSetter.prefab";
         string ytPlaylistUrl;
@@ -184,6 +184,15 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                                 if (GUILayout.Button("Export Lyrics Manifest", noExpandWidthOptions))
                                     ExportLyricsManifest();
                             }
+                        }
+                        using (new EditorGUILayout.HorizontalScope()) {
+                            dynamicLyricsPoolId = EditorGUILayout.TextField("NomSeek Pool", dynamicLyricsPoolId);
+                            dynamicLyricsPoolSize = Mathf.Max(1, EditorGUILayout.IntField("Max Slot", dynamicLyricsPoolSize, GUILayout.Width(160)));
+                            if (GUILayout.Button("Detect", noExpandWidthOptions))
+                                DetectNomSeekLyricsPool();
+                            using (new EditorGUI.DisabledGroupScope(string.IsNullOrWhiteSpace(lyricsEndpoint) || string.IsNullOrWhiteSpace(dynamicLyricsPoolId)))
+                                if (GUILayout.Button("Generate Dynamic Lyrics Pool", noExpandWidthOptions))
+                                    GenerateDynamicLyricsPool();
                         }
                     }
                 }
@@ -1161,13 +1170,13 @@ namespace JLChnToZ.VRC.VVMW.Editors {
 
         string GetDefaultLyricsPoolId() => GetDefaultLyricsPoolId(frontendHandler);
 
-        static string GetDefaultLyricsPoolId(FrontendHandler handler) {
+        internal static string GetDefaultLyricsPoolId(Component handler) {
             var scenePath = handler != null ? handler.gameObject.scene.path : string.Empty;
             var sceneName = string.IsNullOrEmpty(scenePath) ? "vvmw" : Path.GetFileNameWithoutExtension(scenePath);
             return NormalizeLyricsPoolId(sceneName);
         }
 
-        static string NormalizeLyricsPoolId(string value) {
+        internal static string NormalizeLyricsPoolId(string value) {
             value = (value ?? string.Empty).Trim().ToLowerInvariant();
             var chars = value.ToCharArray();
             int writeIndex = 0;

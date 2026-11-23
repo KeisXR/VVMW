@@ -68,7 +68,13 @@ namespace JLChnToZ.VRC.VVMW {
         void SetCoreDynamicLyricsSource(int poolIndex, bool loadNow) {
             localDynamicLyricsPoolIndex = poolIndex;
             if (poolIndex < 0) {
-                if (Utilities.IsValid(core)) core._ClearLyricsSource();
+                if (!Utilities.IsValid(core)) return;
+                // Without a slot the core falls back to the video ID of what it is playing. Synced data arrives
+                // again whenever the queue changes, so it must not wipe lyrics which are already on screen.
+                if (loadNow)
+                    core.SetLyricsSourceAndLoad(VRCUrl.Empty, VRCUrl.Empty);
+                else
+                    core._ClearLyricsSource();
                 return;
             }
             var lyricsUrl = GetLyricsUrl(dynamicLyricsRequestUrlPool, poolIndex);
