@@ -123,7 +123,7 @@ namespace JLChnToZ.VRC.VVMW {
                 Time = duration * value;
                 UpdateLyricsLine();
                 if (synced && Networking.IsOwner(gameObject)) {
-                    lastSyncTime = Networking.GetNetworkDateTime();
+                    lastSyncNetworkTime = Networking.GetNetworkDateTime();
                     ownerNetworkTime = Networking.GetServerTimeInMilliseconds();
                     syncedSpeed = speed;
                     state = activeHandler.IsPlaying ? PLAYING : PAUSED;
