@@ -59,15 +59,22 @@ namespace JLChnToZ.VRC.VVMW {
             isLocalFetching = false;
             if (string.IsNullOrEmpty(localKey)) return;
             requestTime = Time.time;
+            // Waiting starts now, not whenever this client last saw the relay move.
+            lastProgressTime = requestTime;
             if (syncedKey == localKey) {
                 switch (syncedState) {
                     case STATE_DONE:
                         Deliver();
                         return;
                     case STATE_ERROR:
-                    case STATE_UNREACHABLE:
                         // The player who started the video asks again on a reload, which is the moment to retry.
                         if (IsCoreOwner()) Claim();
+                        else Deliver();
+                        return;
+                    case STATE_UNREACHABLE:
+                        if (IsCoreOwner()) Claim();
+                        // Somebody who joined after everyone else failed may well get through, so let them try.
+                        else if (!Contains(syncedTried, LocalId)) Retry();
                         else Deliver();
                         return;
                     case STATE_FETCHING:
@@ -86,6 +93,38 @@ namespace JLChnToZ.VRC.VVMW {
         public void _CancelRequest() {
             localKey = "";
             isLocalFetching = false;
+        }
+
+        /// <summary>
+        /// Internal use only. The lyrics behind <paramref name="key"/> were reported as wrong, so the shared result
+        /// must not be handed out again; the next load fetches afresh, as it did before the relay existed.
+        /// </summary>
+        public void _Invalidate(string key) {
+            if (string.IsNullOrEmpty(key) || syncedKey != key || syncedState == STATE_FETCHING) return;
+            TakeOwnership();
+            syncedKey = "";
+            syncedState = STATE_IDLE;
+            syncedData = "";
+            syncedFetcher = -1;
+            syncedTried = new int[0];
+            RequestSerialization();
+        }
+
+        /// <summary>
+        /// Internal use only. A request this client was taken off after it went quiet came back after all.
+        /// It is still the answer everyone is waiting for, unless somebody already shared one.
+        /// </summary>
+        public void _ReportLateResult(string key, string json) {
+            if (!IsStillWanted(key)) return;
+            Finish(STATE_DONE, Compact(json));
+        }
+
+        /// <summary>
+        /// Internal use only. Like <see cref="_ReportLateResult"/>, for a late HTTP error.
+        /// </summary>
+        public void _ReportLateError(string key, string message) {
+            if (!IsStillWanted(key)) return;
+            Finish(STATE_ERROR, message);
         }
 
         /// <summary>
@@ -165,18 +204,30 @@ namespace JLChnToZ.VRC.VVMW {
                     lastSeenKey = syncedKey;
                     lastProgressTime = now;
                 }
-                if (now - lastProgressTime > fetchTimeout) {
-                    lastProgressTime = now;
-                    if (isLocalFetching) {
+                float stalled = now - lastProgressTime;
+                if (isLocalFetching) {
+                    if (stalled > fetchTimeout) {
                         // This client's own request went silent, e.g. an untrusted URL that never calls back.
+                        // Its answer is still taken if it turns up later (see Core._RelayAbortFetch).
                         isLocalFetching = false;
                         core._RelayAbortFetch(localKey);
                         if (syncedFetcher == LocalId) {
                             HandOver(LocalId, "Timeout");
                             return;
                         }
-                    } else if (syncedFetcher != LocalId && PickCandidate(syncedFetcher, true) == LocalId) {
-                        TakeOver(syncedFetcher);
+                    }
+                } else if (syncedFetcher != LocalId) {
+                    // Everyone still untried waits its turn: the first after one timeout, the second after two,
+                    // and so on. A candidate that never starts (e.g. it plays another video ID) is simply skipped.
+                    int rank = CandidateRank(syncedFetcher);
+                    if (rank >= 0) {
+                        if (stalled > fetchTimeout * (rank + 1)) {
+                            TakeOver(syncedFetcher);
+                            return;
+                        }
+                    } else if (stalled > fetchTimeout * (CandidateCount(syncedFetcher) + 2) && PickCandidate(-1, false) == LocalId) {
+                        // Nobody is left to try and the fetcher has gone silent for good.
+                        GiveUp("Timeout");
                         return;
                     }
                 }
@@ -206,12 +257,15 @@ namespace JLChnToZ.VRC.VVMW {
             syncedData = "";
             syncedFetcher = LocalId;
             syncedTried = new int[0];
-            syncedProgress = 0;
+            // Always moves forward, so a second fetch of the same song never looks like the first one stalling.
+            syncedProgress++;
             RequestSerialization();
             BeginLocalFetch();
         }
 
         void TakeOver(int failedId) {
+            // A result may have been shared meanwhile; never turn a finished job back into a running one.
+            if (syncedState != STATE_FETCHING) return;
             TakeOwnership();
             syncedTried = Append(syncedTried, failedId);
             syncedFetcher = LocalId;
@@ -220,22 +274,40 @@ namespace JLChnToZ.VRC.VVMW {
             BeginLocalFetch();
         }
 
+        // Tries again after everyone else failed, keeping the list of who already did.
+        void Retry() {
+            TakeOwnership();
+            syncedState = STATE_FETCHING;
+            syncedData = "";
+            syncedFetcher = LocalId;
+            syncedProgress++;
+            RequestSerialization();
+            BeginLocalFetch();
+        }
+
         void HandOver(int failedId, string message) {
+            if (syncedState != STATE_FETCHING) return;
             TakeOwnership();
             syncedTried = Append(syncedTried, failedId);
             int next = PickCandidate(-1, true);
             if (next < 0) {
-                syncedState = STATE_UNREACHABLE;
-                syncedData = message == null ? "" : message;
-                syncedFetcher = -1;
-                RequestSerialization();
-                Deliver();
+                GiveUp(message);
                 return;
             }
             syncedFetcher = next;
             syncedProgress++;
             RequestSerialization();
             StartWatching();
+        }
+
+        void GiveUp(string message) {
+            TakeOwnership();
+            isLocalFetching = false;
+            syncedState = STATE_UNREACHABLE;
+            syncedData = message == null ? "" : message;
+            syncedFetcher = -1;
+            RequestSerialization();
+            Deliver();
         }
 
         void BeginLocalFetch() {
@@ -265,6 +337,39 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         bool IsMyFetch(string key) => isLocalFetching && key == localKey && key == syncedKey;
+
+        bool IsStillWanted(string key) =>
+            !string.IsNullOrEmpty(key) && key == localKey && key == syncedKey &&
+            (syncedState == STATE_FETCHING || syncedState == STATE_UNREACHABLE);
+
+        // This client's place among the untried players (lowest ID first), or -1 if it has tried or is excluded.
+        int CandidateRank(int exclude) {
+            int self = LocalId;
+            if (self < 0 || self == exclude || Contains(syncedTried, self)) return -1;
+            var players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
+            VRCPlayerApi.GetPlayers(players);
+            int rank = 0;
+            for (int i = 0; i < players.Length; i++) {
+                var player = players[i];
+                if (!Utilities.IsValid(player)) continue;
+                int id = player.playerId;
+                if (id < self && id != exclude && !Contains(syncedTried, id)) rank++;
+            }
+            return rank;
+        }
+
+        int CandidateCount(int exclude) {
+            var players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
+            VRCPlayerApi.GetPlayers(players);
+            int count = 0;
+            for (int i = 0; i < players.Length; i++) {
+                var player = players[i];
+                if (!Utilities.IsValid(player)) continue;
+                int id = player.playerId;
+                if (id != exclude && !Contains(syncedTried, id)) count++;
+            }
+            return count;
+        }
 
         bool IsCoreOwner() => Utilities.IsValid(core) && Networking.IsOwner(core.gameObject);
 

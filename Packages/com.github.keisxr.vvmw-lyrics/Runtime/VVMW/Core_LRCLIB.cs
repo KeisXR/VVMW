@@ -62,6 +62,9 @@ namespace JLChnToZ.VRC.VVMW {
         bool isLyricsFetching;
         // True when this client fetches on its own because the relay could not settle on someone.
         bool isLyricsRelayBypassed;
+        // True once the relay moved the job on after this client's request went quiet. The request is still
+        // listened to, since a slow answer (e.g. stuck behind the string loading rate limit) is still the answer.
+        bool isLyricsFetchAbandoned;
 
         VRCUrl lyricsRequestUrl = VRCUrl.Empty;
         VRCUrl lyricsBadReportUrl = VRCUrl.Empty;
@@ -198,6 +201,7 @@ namespace JLChnToZ.VRC.VVMW {
         void BeginLyricsFetch(string key) {
             lyricsFetchKey = key;
             isLyricsFetching = false;
+            isLyricsFetchAbandoned = false;
             isLyricsRelayBypassed = false;
             if (UseLyricsRelay) lyricsRelay._Request(key);
             else StartLocalLyricsFetch();
@@ -206,6 +210,7 @@ namespace JLChnToZ.VRC.VVMW {
         void CancelLyricsFetch() {
             lyricsFetchKey = "";
             isLyricsFetching = false;
+            isLyricsFetchAbandoned = false;
             isLyricsRelayBypassed = false;
             if (Utilities.IsValid(lyricsRelay)) lyricsRelay._CancelRequest();
         }
@@ -213,6 +218,7 @@ namespace JLChnToZ.VRC.VVMW {
         // Actually sends the request from this client.
         void StartLocalLyricsFetch() {
             isLyricsFetching = true;
+            isLyricsFetchAbandoned = false;
             if (lyricsFetchKey.StartsWith(LYRICS_VIDEO_ID_KEY_PREFIX)) {
                 lyricsVideoIdRetried = false;
                 RequestLyricsVideoIdChunk(0);
@@ -241,9 +247,9 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use only. The relay gave up on this client's request, which went silent.
         /// </summary>
         public void _RelayAbortFetch(string key) {
-            if (key != lyricsFetchKey) return;
-            isLyricsFetching = false;
-            lyricsVideoIdChunk = -1;
+            if (key != lyricsFetchKey || !isLyricsFetching) return;
+            // Keep listening: the request in flight may still answer. No further requests are sent for it.
+            isLyricsFetchAbandoned = true;
         }
 
         /// <summary>
@@ -293,19 +299,34 @@ namespace JLChnToZ.VRC.VVMW {
         bool ShouldReportToRelay => isLyricsFetching && UseLyricsRelay;
 
         void FinishLocalFetchWithResult(string json) {
-            if (ShouldReportToRelay) lyricsRelay._ReportResult(lyricsFetchKey, json);
+            if (ShouldReportToRelay) {
+                if (isLyricsFetchAbandoned) lyricsRelay._ReportLateResult(lyricsFetchKey, json);
+                else lyricsRelay._ReportResult(lyricsFetchKey, json);
+            }
             isLyricsFetching = false;
+            isLyricsFetchAbandoned = false;
         }
 
         void FinishLocalFetchWithError(string message) {
-            if (ShouldReportToRelay) lyricsRelay._ReportError(lyricsFetchKey, message);
+            if (ShouldReportToRelay) {
+                if (isLyricsFetchAbandoned) lyricsRelay._ReportLateError(lyricsFetchKey, message);
+                else lyricsRelay._ReportError(lyricsFetchKey, message);
+            }
             isLyricsFetching = false;
+            isLyricsFetchAbandoned = false;
         }
 
         // An HTTP status means the server was reached; anything else (DNS, refused, timeout, blocked) means it was not.
         bool IsServerReached(int errorCode) => errorCode >= 100 && errorCode < 600;
 
         void RequestLyricsVideoIdChunk(int chunk) {
+            // Somebody else is spelling the ID out now; sending the rest from here as well would only add load.
+            if (isLyricsFetchAbandoned) {
+                lyricsVideoIdChunk = -1;
+                isLyricsFetching = false;
+                isLyricsFetchAbandoned = false;
+                return;
+            }
             int offset = chunk * 2;
             int index = chunk * LYRICS_VIDEO_ID_CHUNK_SIZE;
             if (chunk < LYRICS_VIDEO_ID_CHUNKS - 1)
@@ -401,6 +422,8 @@ namespace JLChnToZ.VRC.VVMW {
             lyricsStatus = "";
             SendEvent("_OnLyricsData");
             VRCStringDownloader.LoadUrl(lyricsBadReportUrl, (IUdonEventReceiver)this);
+            // Otherwise the relay would keep handing out the lyrics that were just reported as wrong.
+            if (Utilities.IsValid(lyricsRelay)) lyricsRelay._Invalidate(lyricsFetchKey);
         }
 
         public override void OnStringLoadSuccess(IVRCStringDownload result) {
@@ -436,6 +459,12 @@ namespace JLChnToZ.VRC.VVMW {
             }
             lyricsVideoIdChunk = -1;
             var message = string.IsNullOrEmpty(result.Error) ? errorCode.ToString() : result.Error;
+            if (!IsServerReached(errorCode) && isLyricsFetchAbandoned) {
+                // The job has already moved on from this client; a late connection failure changes nothing.
+                isLyricsFetching = false;
+                isLyricsFetchAbandoned = false;
+                return;
+            }
             if (!IsServerReached(errorCode) && ShouldReportToRelay) {
                 // This client could not get through at all; the relay hands the job to the next player and
                 // tells everyone, this client included, if nobody else can get through either.
