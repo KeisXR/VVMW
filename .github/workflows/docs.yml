@@ -6,7 +6,6 @@ on:
     paths:
       - '.github/workflows/docs.yml'
       - 'docs/**'
-      - 'Assets/Editor/DocfxProjectFileGenerator.cs'
       - 'CHANGELOG.md'
       - 'Packages/manifest.json'
       - 'Packages/packages-lock.json'
@@ -27,28 +26,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      UNITY_VERSION: 2022.3.22f1
       SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           lfs: true
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Restore Unity Library cache
-        uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-docs-${{ runner.os }}-${{ env.UNITY_VERSION }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: |
-            Library-docs-${{ runner.os }}-${{ env.UNITY_VERSION }}-
+        uses: actions/configure-pages@v6
 
       - name: Setup .NET Core
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
 
@@ -61,49 +51,6 @@ jobs:
             https://vpm.pimaker.at/index.json
             https://redsim.github.io/vpmlisting/index.json
 
-      - name: Remove stale Unity project files
-        run: |
-          find . -maxdepth 1 \( -name '*.csproj' -o -name '*.csproj.lscache' -o -name '*.sln' \) -delete
-
-      - name: Generate Unity project files
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          projectPath: .
-          unityVersion: ${{ env.UNITY_VERSION }}
-          targetPlatform: StandaloneLinux64
-          allowDirtyBuild: true
-          buildMethod: JLChnToZ.VRC.VVMW.Editor.DocfxProjectFileGenerator.Generate
-
-      - name: Validate generated project files
-        run: |
-          test -f JLChnToZ.VVMW.csproj
-          test -f JLChnToZ.VVMW.Editor.csproj
-
-      - name: Prepare DocFX project files
-        run: |
-          for f in \
-            JLChnToZ.VVMW.csproj \
-            JLChnToZ.VVMW.Editor.csproj \
-            JLChnToZ.VRC.Foundation.csproj \
-            JLChnToZ.VRC.Foundation.Editor.csproj \
-            LazySwitch.Editor.csproj \
-            LazySwitch.Runtime.csproj
-          do
-            if [ -f "$f" ]; then
-              cp "$f" "Docfx.$f"
-              sed -i 's#<NoStandardLibraries>true</NoStandardLibraries>#<NoStandardLibraries>false</NoStandardLibraries>#g' "Docfx.$f"
-              sed -i 's#<NoStdLib>true</NoStdLib>#<NoStdLib>false</NoStdLib>#g' "Docfx.$f"
-              sed -i 's#<NoConfig>true</NoConfig>#<NoConfig>false</NoConfig>#g' "Docfx.$f"
-              sed -i 's#<DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>#<DisableImplicitFrameworkReferences>false</DisableImplicitFrameworkReferences>#g' "Docfx.$f"
-            fi
-          done
-          test -f Docfx.JLChnToZ.VVMW.csproj
-          test -f Docfx.JLChnToZ.VVMW.Editor.csproj
-
       - name: Install DocFX
         working-directory: ${{ runner.temp }}
         run: |
@@ -111,29 +58,21 @@ jobs:
           dotnet tool update --tool-path "$RUNNER_TEMP/docfx-tools" docfx
           echo "$RUNNER_TEMP/docfx-tools" >> "$GITHUB_PATH"
 
-      - name: Update docfx.json with GitHub Pages URL
+      - name: Update DocFX config with GitHub Pages URL
         run: |
-          sed -i "s|\$baseUrl|${SITE_URL}|g" docs/docfx.json
-          sed -i "s|\$xrefMap|${SITE_URL}/xrefmap.yml|g" docs/docfx.json
           sed -i "s|\$baseUrl|${SITE_URL}|g" docs/docfx.fallback.json
           sed -i "s|\$xrefMap|${SITE_URL}/xrefmap.yml|g" docs/docfx.fallback.json
 
-      - name: Build the documentation
+      - name: Build documentation from source
         run: |
           rm -rf docs/api
-          docfx docs/docfx.json
+          docfx docs/docfx.fallback.json
           api_count=$(find docs/api -maxdepth 1 -name '*.yml' | wc -l)
-          if [ "$api_count" -eq 0 ]; then
-            echo "Primary metadata produced no API yaml, running source fallback..."
-            rm -rf docs/api
-            docfx docs/docfx.fallback.json
-            api_count=$(find docs/api -maxdepth 1 -name '*.yml' | wc -l)
-          fi
           echo "API yaml count: $api_count"
           test "$api_count" -gt 0
 
       - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -146,4 +85,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

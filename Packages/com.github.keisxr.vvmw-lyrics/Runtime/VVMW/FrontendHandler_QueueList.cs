@@ -94,7 +94,9 @@ namespace JLChnToZ.VRC.VVMW {
                 if (!enableQueueList) core.Stop();
             }
             if (string.IsNullOrEmpty(queuedTitle))
-                queuedTitle = $"{Networking.LocalPlayer.displayName}:\n{UnescapeUrl(pcUrl)}";
+                queuedTitle = $"\u200B{Networking.LocalPlayer.displayName}:\n\u200B{UnescapeUrl(pcUrl)}";
+            else if (queuedTitle[0] != '\u200B')
+                queuedTitle = $"\u200B{Networking.LocalPlayer.displayName}:\n{queuedTitle}";
             if (enableQueueList) {
                 bool isQueueEmpty = IsArrayNullOrEmpty(localQueuedUrls);
                 if (core.IsReady || core.IsLoading || !isQueueEmpty) {
@@ -142,7 +144,7 @@ namespace JLChnToZ.VRC.VVMW {
             localCurrentTitle = queuedTitle;
             SetCoreDynamicLyricsSource(pcUrl, questUrl, false);
             core.PlayUrl(pcUrl, questUrl, index);
-            core._ResetTitle();
+            UpdateTitle();
             RequestSync();
         }
 
@@ -215,11 +217,29 @@ namespace JLChnToZ.VRC.VVMW {
                 localCurrentTitle = title;
                 SetCoreDynamicLyricsSource(url, questUrl, false);
                 core.PlayUrl(url, questUrl, playerIndex);
-                core._ResetTitle();
+                UpdateTitle();
                 RecordPlaybackHistory(url, questUrl, playerIndex, title);
             }
             RequestSync();
             UpdateState();
+        }
+
+        void UpdateTitle() {
+            if (string.IsNullOrEmpty(localCurrentTitle)) {
+                core._ResetTitle();
+                return;
+            }
+            int index = localCurrentTitle.IndexOf('\n');
+            if (index <= 0) {
+                core.SetTitle(localCurrentTitle, "");
+                return;
+            }
+            index++;
+            if (index < localCurrentTitle.Length && localCurrentTitle[index] != '\u200B') {
+                core.SetTitle(localCurrentTitle.Substring(index), "");
+                return;
+            }
+            core._ResetTitle();
         }
 
         void GetLastPlayedUrl(out VRCUrl pcUrl, out VRCUrl questUrl, out byte playerIndex) {

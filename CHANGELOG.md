@@ -6,6 +6,120 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## 1.8.4-beta.0 - 2026-11-21
+### Fixed
+- U# compiler error on Unity 6 (workaround for now)
+- Inspector layout issue on Unity 6
+
+## 1.8.3 - 2026-11-07
+### Fixed
+- Keep the playback history alive when a Quest URL follows a video without one [#97](https://github.com/JLChnToZ/VVMW/pull/97)
+- Pick up AVPro's new texture when the resolution changes mid-play [#96](https://github.com/JLChnToZ/VVMW/pull/96)
+- Compile error when VRCLightVolumes install after VizVid
+- Live stream video skips/replays on owner re-enables the video player
+
+## 1.8.3-beta.0 - 2026-10-18
+### Fixed
+- Some new localization key missed on merging
+- Material slider doesn't work on first cloned
+- Material variant doesn't properly connected on clone
+
+### Added
+- Super sample mode for screen shaders
+- Hybrid GI variant for video surface screen shader
+- More blending options for video unlit shaders
+
+### Changed
+- Disabling the video player will now stops the video playing, and reload when re-enabling it.
+- Make created light volume reasonability bright by default.
+- Allow manually adds light volumes with screen texture as cookie (without screen configurator).
+
+## 1.8.2 - 2026-09-24
+### Fixed
+- A compiler error on VRCLV first imported.
+- Unable to select screen mode on core inspector.
+
+## 1.8.1 - 2026-09-22
+### Fixed
+- Single entry exhibition setup don't have an option to switch off auto play on join.
+- Some localization lost in inspector
+- Incorrect localization key in Global Sync button
+- Compiler errors on switiching platforms [#94](https://github.com/JLChnToZ/VVMW/issues/94)
+
+### Changed
+- Minor tweaks on the inspector UI
+
+## 1.8.0 - 2026-09-03
+
+### Fixed
+- A UI bug on selecting playlist in playlist editor
+- Setup speakers button stuck when removed default audio source.
+- Audio configurator handles not moving along.
+- Spamming exception when deleted assigned screen targets.
+
+### Added
+- New option to return to previous playing playlist item on queue list clear.
+- Audio Source Configurator for 5.1 and stereo audio sources.
+- Cantonese localization (runtime only)
+- Empty message for audio source / screen targets
+
+### Changed
+- Light Volume component placement now precisely estimated (calculated with polygon geometries).
+- Enhanced custom title display flow
+- Rearranged inspector layout
+- Enhanced playlist scroll view interaction
+
+## 1.7.6-beta.4 - 2026-08-01
+### Fixed
+- Luminance don't have effects on VRCLightVolume shaders.
+
+### Changed
+- Auto hide idle screen UI if idle texture been set.
+- Global broadcast texture will now set corresponding scale transform property.
+- Make it compatible with VRCLightVolumes 3.0.0.dev-13 beyond.
+
+## 1.7.6-beta.3 - 2026-07-09
+### Added
+- Color palette picker
+
+### Fixed
+- Adjusted LTCGI multi monitor average aspect ratio calculation logic
+
+### Changed
+- Logic in Light Volume Adaptor for support luminance and other integrations.
+
+## 1.7.6-beta.2 - 2026-06-29
+### Fixed
+- Compile errors on build
+
+## 1.7.6-beta.1 - 2026-06-29
+### Added
+- Dedicated error message on failing to load YouTube URL
+- Brightness support for LTCGI CRT shader
+- VRCLightVolumes V3 cookie based light source support
+
+### Fixed
+- Null reference on exhibition setup (or other setup without URL input field)
+- Translated wordings in inspector
+- How playlist importer discovers other video players playlist
+- ActiveRegionManager spawns even nobody is using it in some cases.
+
+## 1.7.5 - 2026-06-04
+### Fixed
+- Auto adjust scaling flow
+
+### Chaged
+- No longer hides speed adjustment buttons when locked.
+- Moved active region settings in inspector.
+- Removed "Add screen target" and "Add audio source" input fields, now can just drop it anywhere within the component inspector.
+- Now auto selects the first playlist if enabled auto play but selecting queue list.
+- Enabling "Auto volume down on out of range" checkbox will ask before auto spawning an active region.
+
+## 1.7.4 - 2026-05-24
+### Fixed
+- Speed control/playback progress shift control incorrectly hide/unhide when locked.
+- Unify full-width/half-width punctuations for editor Chinese localizations. ([#85](https://github.com/JLChnToZ/VVMW/issues/85))
+
 ## 1.7.4-beta.1 - 2026-05-18
 ### Added
 - Game object active state can be considered if player is triggering an active region.

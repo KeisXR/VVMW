@@ -5,8 +5,8 @@ _lang: zh-TW
 VizVid 是一款為 VRChat 所設計，用途廣泛的多媒體播放器前端。除了跟朋友一起看影片、直播，大音樂表演活動場地，展示會場也能使用，用途極為廣泛。  
 VizVid 採用模組化設計，針對任何使用情境，可根據自己的需求，選擇適合的模組，輕鬆地拼裝出屬於自己的 VizVid。  
 
-> [!NOTE]  
-> 本說明文件涵蓋 v1.7.3 或往後版本，一部分說明可能與舊版有所不同  
+> [!NOTE]
+> 本說明文件涵蓋 v1.8.0 或往後版本，一部分說明可能與舊版有所不同  
 
 ---
 ## 快速上手
@@ -50,6 +50,35 @@ VizVid 採用模組化設計，針對任何使用情境，可根據自己的需�
 ![image](../resources/images/S1Bar91MWe.png)
 
 ---
+### 設定  
+#### 全域設定  
+針對該世界中所有 VizVid 的設定。  
+![image](../resources/images/S1sutSk_zl.png)  
+* **解鎖模式**  
+調整 VizVid 觸控螢幕預設解鎖模式。  
+    * **經典**  
+    將指標瞄準螢幕下方，出現指示器後，按下即可顯示介面。  
+    * **全螢幕**  
+    指標指向螢幕任何一處，按下即可顯示介面。  
+* **核心控制策略**  
+Active Region 專用功能。調整功能觸發策略。預設值為 `僅在邊界內`。  
+    * **全部控制**  
+    僅啟用以下 Active Region 功能：  
+        * AudioLink  
+        * Overlay Control  
+    * **僅在邊界內**  
+    進入 Active Region 內才會啟用所有功能  
+    * **僅在邊界內，如果沒有則選擇最近的**  
+    進入 Active Region 內會啟用，若沒有進入，則會偵測離玩家最近的 Active Region 並啟用所有功能。  
+* **玩家檢測原點**  
+設定 Active Region 偵測判定位置。  
+
+#### 播放器設定  
+將簡易模式切換至進階模式，可顯示完整設定選項。  
+![image](../resources/images/HkKk0FeOMg.png)  
+詳細說明請見 [Core](#core)。  
+
+---
 ### 編輯播放清單  
 以下說明播放清單編輯介面之各項功能。  
 ![image](../resources/images/ByijBWfhlg.png)  
@@ -80,8 +109,7 @@ VizVid 採用模組化設計，針對任何使用情境，可根據自己的需�
 
 ---
 ## 模組  
-除了上述的基本模板，  
-VizVid 也提供各式各樣的模組，供使用者自由組合屬於自己的 VizVid。  
+除了上述的基本模板，VizVid 也提供各式各樣的模組，供使用者自由組合屬於自己的 VizVid。  
 本章節將對於不同的模組進行基本介紹。  
 
 ### 前言  
@@ -135,8 +163,8 @@ VizVid 用螢幕，可與控制器分開放置。
 * **Stream Key Assigner**  
 自動生成 Streamkey。可設定 TopazChat 等串流服務。  
 常用於影音表演型活動。  
-> [!Note]  
-> 相關應用，可參照 [Stream Key Assigner](#streamkeyassigner)
+    > [!Note]
+    > 相關應用，可參照 [Stream Key Assigner](#streamkeyassigner)
 
 ---
 * **Audio Source (Mono)**  
@@ -145,7 +173,7 @@ VizVid 用螢幕，可與控制器分開放置。
 新增一組 VizVid 用的立體聲 Audio Source。  
 * **Audio Source (5.1 Surround)**  
 新增一組 VizVid 用的 5.1 環繞音效 Audio Source。  
-可參照 [5.1 聲道配置](#51-聲道配置)。
+可參照 [5.1 聲道配置](#51-聲道配置)。  
 
 ---
 * **Auto Play on Near (Local Only)**  
@@ -154,101 +182,204 @@ VizVid 用螢幕，可與控制器分開放置。
 (該功能僅支援 Local 模式。)  
 
 ---
+* **Light Volume for Screen**  
+讓 VizVid 螢幕支援 VRC Light Volumes (VRCLV)  
+    > [!note]
+    > 該選項僅在選擇含有螢幕物件時才出現。  
+
+---
 * **Active Region**  
 提供 VizVid 一個有效範圍，玩家一旦進入，即可觸發指定功能。  
+詳細功能請見 [Active Region](#active-region)  
 
 ---
 ### 元件 (Component)  
-> [!note]
-> 本章節僅列出一般使用者向功能。  
-> 其餘未列出之設定，若有不明之處，  
-> 可參考[特殊應用](#特殊應用)、[Q&A](#QampA)，或[加入 Discord 伺服器](https://discord.gg/fkDueQMbj8)進行詢問。  
-#### **Core**  
-該元件為 VizVid 的大腦，管理所有播放控制。
+#### Core  
+該元件為 VizVid 的大腦，管理所有播放控制。  
 > [!Note]
-> 未串接 `Frontend Handler` 元件時，部分選項將不予顯示。
-* **常用設定**  
-    * **編輯播放清單...**  
-    點選後，會顯示播放清單的編輯視窗。可以製作、編輯、匯入播放清單。  
-    詳細使用說明請見[編輯播放清單](#編輯播放清單)。  
-    * **啟用待播清單**  
-    啟用後，在輸入網址時，可以選擇將網址佇列至待播清單。  
-    * **歷史紀錄大小**  
-    設定播放網址歷史記錄數量，`0` 為停用。  
-    *※ 請注意，來自播放清單的點播不會記錄至歷史記錄。*  
-* **預設行為**  
-    調整 VizVid 在該世界中的預設值。  
-    * **加入時自動播放**  
-    用戶加入世界時會開始播放預設播放清單  
+> 若有遺失模組，部分選項將不予顯示 / 變更。  
+##### 音訊設定
+* **預設音量**  
+玩家加入世界時的預設音量。  
+* **預設靜音**  
+玩家加入世界時，預設靜音。  
+* **音量淡入淡出持續時間**  
+設定靜音 / 解除靜音、進入 / 離開 Active Region 時，音量淡入淡出的時間，`0` 為停用。  
+* **超出範圍時低音量**
+指定離開 Active Region 時，需要降低的目標音量。
+
+##### 重覆與隨機播放設定  
+* **預設重複模式**  
+可以選擇無、重複一次、重複全部。  
+* **預設隨機播放**  
+播放器預設啟用隨機播放。  
+* **隨機播放前種子隨機**  
+每次播放新的播放清單前，會重新打亂演算法，增加隨機度。  
+
+##### 常用設定  
+* **編輯播放清單...**  
+點選後，會顯示播放清單的編輯視窗。可以製作、編輯、匯入播放清單。  
+詳細使用說明請見[編輯播放清單](#編輯播放清單)  
+* **啟用待播清單**  
+啟用後，在輸入網址時，可以選擇將網址佇列至待播清單。  
+* **歷史紀錄大小**  
+設定播放網址歷史記錄數量，`0` 為停用。  
+    > [!Note]
+    > 來自播放清單的點播不會記錄至歷史記錄。  
+
+##### 預設行為
+* **預設播放清單**  
+可從製作好的播放清單中，選擇預設播放的內容。  
+* **加入時自動播放**  
+玩家加入世界時會開始播放預設播放清單。  
     * **自動播放延遲**  
     若世界中沒有 VizVid 以外的播放器，不建議更動該數值。  
-    * **閒置時自動播放**  
-    若清單中影片播放完畢，則會播放預設播放清單。  
-    * **預設播放清單**  
-    可從製作好的播方清單中，選擇預設播放的內容。  
-    * **預設音量**  
-    用戶加入世界時的預設音量。  
-    * **預設靜音**  
-    用戶加入世界時，預設靜音。  
-    * **預設重複模式**  
-    可以選擇無、重複一次、重複全部。  
-    * **預設隨機播放**  
-    播放器預設啟用隨機播放。  
-    * **隨機播放前種子隨機**  
-    每次播放新的播放清單前，會重新打亂演算法，增加隨機度。  
-* **進階功能**
-    * **錯誤處理**  
-        * **總重試次數**  
-        載入失敗時，重試次數的上限。  
-        * **後備重試次數**  
-        重試次數超過該值時，會自動切換播放後端  
-        * **重試延遲**  
-        載入失敗時，重試的間隔時間。  
-        * **時間飄移檢測閾值**  
-        檢測所有用戶之間播放延遲。超過閾值會自動進行同步。  
-    * **播放器處理器**  
-    管理 VizVid 串接的後端。  
-    預設提供 AVPro、Builtin、Image。  
-        * **AVPro (AVPro Module)**  
-            * **低延遲**  
-            啟用 AVPro 的低延遲模式。  
-            僅限播放直播時有效。  
-    * **模組串接**  
-    管理已串接至 VizVid 的模組。  
-        * **影片螢幕目標**  
-        指定含有 `Screen Configurator` 元件的螢幕物件。  
-        * **音源**  
-        指定輸出 VizVid 聲音的 `Audio Source`  
-        可指定多個 Audio Source，進行多聲道設定。
-        * **Audio Link**  
-        指定串接的 `Audio Link` 元件。  
-        若專案中有 Audio Link，可使用 <kbd>自動搜尋</kbd> 進行串接  
-        * **影片標題查看器 (YTTL)**  
-        指定串接的 `YTTL Manager` 元件。  
-        * **廣播螢幕材質**  
-        啟用廣播螢幕畫面，讓支援的 Shader (例如：[Poiyomi](https://www.poiyomi.com/color-and-normals/decals#video-texture)) 能顯示 VizVid 的螢幕畫面。  
-        * **即時 GI 更新間隔**  
-        即時全域光照的更新間隔。`0` 為停用。  
-    * **其他**  
-        * **URL 輸入篩選器**  
-        URL 過濾設定。  
-        可參考該 [Udon 腳本](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/com.github.keisxr.vvmw-lyrics/Runtime/VVMW/InputFilterBase.cs)，基於 Inheritance 進行實作。  
-        * **全域預設材質**  
-        當 VizVid 沒有畫面時，所有畫面預設顯示的材質。  
-        可於每個 `Screen Configurator` 各別更改。  
-        * **同步**  
-        設定 VizVid 是否為 Global 運作。預設啟動。  
-        * **啟用設置存檔**  
-        設定是否儲存 VizVid 的設定 (音量等)。預設啟動。  
-    * **額外功能**  
-        * **已鎖定**  
-        預設鎖定播放器。可編寫[相容腳本](../api/JLChnToZ.VRC.VVMW.FrontendHandler.html?q=locked#JLChnToZ_VRC_VVMW_FrontendHandler_Locked)，或選購 [Udon Auth](https://xtl.booth.pm/items/3826907) 進行設定。  
-    * **事件目標**  
-    可針對設定在此的 Udon Sharp 傳送事件資料，整合自訂腳本。  
+* **閒置行為**  
+若清單中影片播放完畢，則執行指定動作：  
+    * **停止播放**  
+    不進行任何動作。  
+    * **播放預設播放清單**  
+    回到預設播放清單，從播放第一個項目開始播放。  
+    * **播放最後播放的播放清單項目**  
+    若在播放清單播放途中，播放了使用者的點播內容，在播放完畢後，會自動回到上一次的播放項目播放清單內容。  
+* **低延遲**  
+啟用 AVPro 的低延遲模式，有助降低觀賞直播的延遲時間。  
+
+##### 主題設定  
+可設定串接於該 VizVid Core 下的所有 UI 顏色。
+* **主題調色盤**  
+基於當前顏色，調整基調。  
+* **顏色#**  
+針對不同部位設定顏色。  
+* **建置時套用**  
+可決定是否於建置時，將目前調色盤的顏色，自動套用至 VizVid。  
+* **套用**  
+將目前顏色設定套用至 VizVid。  
+
+##### 畫面設定  
+* **待機圖片**  
+可設定無影片播放時，螢幕預設顯示的圖片。  
+* **廣播螢幕材質**  
+啟用廣播螢幕畫面，讓支援的 Shader (例如：[Poiyomi](https://www.poiyomi.com/color-and-normals/decals#video-texture)) 能顯示 VizVid 的螢幕畫面。  
+* **即時 GI 更新間隔**  
+即時全域光照的更新間隔。`0` 為停用。  
+
+##### 模組串接  
+管理已串接至 VizVid 的模組。  
+* **螢幕目標**  
+列出含有 `Screen Configurator` 元件的螢幕物件。  
+    * **模式**  
+    預設提供三個選項：  
+        * 屬性塊  
+        在不修改材質屬性的前提，直接將畫面套用至該物件上。最節省計算資源。  
+        * 共享材質  
+        將影片畫面直接輸出至材質上，若有其他使用該材質的物件，皆會顯示 VizVid 的畫面。  
+        * 複製材質  
+        先自動複製該材質，並將影片畫面直接輸出至材質上。  
+        > [!note]
+        > 根據情況，該選項可能無法使用。
+    * **材質**  
+    若一個物件上，有多個材質，可指定 VizVid 畫面要輸出的目標材質。  
+    * **影片材質屬性名稱**  
+    影片畫面貼圖屬性名稱。會根據該材質的 Shader，自動填入預設名稱。
+    * **使用縮放偏移**  
+    若材質 Shader 不支援 AVPro 模式，發生畫面顛倒的情況，則可勾起該選項嘗試修復。  
+    * **AVPro 模式屬性名稱**
+    若材質 Shader 支援 AVPro 模式，可自訂屬性名稱進行對應。
+    * **發光強度**  
+    設定預設螢幕發光強度，預設值為 `1`。
+    * **鏡像翻轉**  
+    決定畫面是否在鏡子內水平反轉。勾起為會反轉。
+    * **可見模式**  
+    決定 VizVid 螢幕在 VRChat 中會顯示的條件。
+    * **待機圖片**  
+    有別於全域待機圖片設定，可針對該螢幕目標設定特定的待機圖片。  
+    * **Point Light Volume**  
+    設定 VRC Light Volume。詳情請見 [VRC Light Volume (VRCLV)](#vrc-light-volume-vrclv)  
+    * **修正螢幕比例**  
+    若有調整過播放器物件比例，可透過此按鈕自動修正顯示比例，防止影像變形。  
+
+* **音源**  
+列出輸出 VizVid 聲音的 `Audio Source`  
+可指定多個 Audio Source，進行多聲道設定。  
+    * **Mode**
+    設定欲接收的聲音頻道。(僅限 AVPro 有效)
+    > [!note]
+    > 其餘設定為 VRC Spatial Audio Source 之選項，可參考[該網頁](https://creators.vrchat.com/worlds/components/vrc_spatialaudiosource/)說明進行設定。  
+    * **顯示音訊來源屬性**
+    顯示該音源屬性設定視窗，以進行調整。
+
+* **播放器處理器**  
+管理 VizVid 串接的後端。  
+預設提供 AVPro、Builtin、Image。  
+可透過拖拉左側 <kbd>=</kbd> 圖示調整預設順序。  
+![image](../resources/images/rJlS1Ek_zl.png)  
+* **AVPro (AVPro Module)**  
+    * **最大解析度**  
+    向 YouTube 等支援多解析度網站發出存取請求時，預設要求的解析度。  
+    * **低延遲**  
+    啟用 AVPro 的低延遲模式。僅限播放直播時有效。  
+    * **主要音源 (立體聲混音/左聲道)**  
+    設定主要輸出的音源。可根據音源的設定，輸出立體聲或左聲道。  
+    * **主要音源 (右聲道)**  
+    設定主要輸出的音源。只要該音源設定為右聲道，即可指定並輸出右聲道。  
+    * **使用防閃爍解決方案**  
+    解決 AVPro 在觀看內容時，偶爾發生螢幕閃爍的問題。  
+        > [!Note]
+        > 目前 VRChat 已透過更新 AVPro 修正該問題，預設停用。  
+    * **後備播放器處理器**  
+    若播放內容無法使用 AVPro 進行播放，則切換至該播放後端繼續嘗試。預設為 `Builtin Module`。  
+* **內建 (Builtin Module)**  
+    * **最大解析度**  
+    向 YouTube 等支援多解析度網站發出存取請求時，預設要求的解析度。  
+    * **主要音源 (立體聲混音/左聲道)**  
+    設定主要輸出的音源。可根據音源的設定，輸出立體聲或左聲道。  
+        > [!note]
+        > 由於內建後端不支援多個音源，建議將輸出目標音源設定為立體聲。  
+    * **後備播放器處理器**  
+    若播放內容無法使用內建播放器進行播放，則切換至該播放後端繼續嘗試。預設為 `AVPro Module`。  
+* **圖片 (Image Module)**  
+    * **影片播放器後端名稱**  
+    圖片後端處理器名稱。  
+    * **後備播放器處理器**  
+    若內容無法顯示，則切換至該播放後端繼續嘗試。預設為空。  
+    > [!note]
+    > 該區域設定不建議更動  
+* **影片標題查看器 (YTTL)**  
+指定串接的 `YTTL Manager` 元件。  
+* **AudioLink**  
+指定串接的 `AudioLink` 元件。  
+若專案中有 AudioLink，可使用 <kbd>自動搜尋</kbd> 進行串接。  
+
+##### 錯誤處理  
+* **最大重試次數**  
+載入失敗時，重試次數的上限。  
+* **後備重試次數**  
+重試次數超過該值時，會自動切換播放後端。  
+* **重試延遲**  
+載入失敗時，重試的間隔時間。  
+* **時間飄移檢測閾值**  
+檢測所有用戶之間播放延遲。超過閾值會自動進行同步。  
+
+##### 其他  
+* **同步**  
+設定 VizVid 是否為 Global 運作。預設啟動。  
+* **啟用設置存檔**  
+設定是否儲存 VizVid 的設定 (音量等)。預設啟動。  
+* **URL 輸入篩選器**  
+URL 過濾設定。  
+可參考該 [Udon 腳本](https://github.com/JLChnToZ/VVMW/blob/develop/Packages/idv.jlchntoz.vvmw/Runtime/VVMW/InputFilterBase.cs)，基於 Inheritance 進行實作。  
+* **鎖定**  
+鎖定播放器。可使用、編寫[相容腳本](../api/JLChnToZ.VRC.VVMW.FrontendHandler.html?q=locked#JLChnToZ_VRC_VVMW_FrontendHandler_Locked)，或選購 [Udon Auth](https://xtl.booth.pm/items/3826907) 進行動態設定。  
+* **事件目標**  
+可針對設定在此的 Udon Sharp 傳送事件資料，整合自訂腳本。  
+
 #### Frontend Handler  
 該元件負責管理播放清單，播放器預設行為。  
-`Core` 元件中已整合本元件之選項。可參照 [Core](#Core) 章節。  
-#### **UI Handler**  
+> [!note]
+> `Core` 元件中已整合本元件之選項。可參照 [Core](#Core) 章節。  
+
+#### UI Handler  
 該元件負責管理播放器 UI 相關的串接。  
 * **主要參考**  
     * **播放器核心**  
@@ -257,18 +388,31 @@ VizVid 用螢幕，可與控制器分開放置。
     * **播放器及播放清單處理器**  
     負責連結 `Playlist Queue Handler` 元件。  
     若遺失，可點選 <kbd>自動搜尋</kbd>，串接至場景內的 `Playlist Queue Handler` 元件。  
-#### Color Config  
-該元件負責管理 UI 的顏色設定，通常與 `UI Handler` 一同出現。  
-* **顏色調色盤**  
-預設提供六種顏色，指定至 VizVid 不同部位。  
-* **建置時自動套用**  
-預設啟用，當編譯場景時，會自動套用目前更改的顏色。
-* **套用**  
-可只套用當前 `Color Config` 元件，或是套用至場景內所有 `Color Config` 元件。  
+
+> [!note]
+> 剩餘選項根據不同 UI 類型，會有不同的設定組態。可根據需求調整設定，或串接自製的 UI 元件。
+
 #### Screen Configurator  
 該元件負責串接螢幕畫面至指定 Shader。  
 * **Screen Renderer**  
 指定欲輸出畫面的 Mesh Renderer。  
+
+> [!note]
+> `Core` 元件中已整合本元件之部分選項。可參照 [Core](#Core) 章節。  
+
+#### Color Config  
+該元件負責管理該 UI 的顏色設定。  
+* **主題調色盤**  
+基於當前顏色，調整基調。  
+* **顏色#**  
+預設提供六種顏色，指定至 VizVid 不同部位。  
+* **建置時套用**  
+可決定是否於建置時，將目前調色盤的顏色，自動套用至 VizVid。  
+* **套用**  
+可將顏色只套用至當前 `Color Config` 元件，或套用至場景內所有 `Color Config` 元件。  
+* **進階**  
+    * **增加、減少**  
+    可根據需求，另外新增不同顏色編號，搭配 `UI Graphics` 元件，指定特定顏色索引編號，設定該 UI 的顏色。  
 
 #### Active Region  
 該元件負責管理 VizVid 的有效範圍設定，玩家一旦進入，即可觸發指定功能。  
@@ -279,6 +423,24 @@ VizVid 用螢幕，可與控制器分開放置。
 調整有效範圍。  
 * **靜態區域**  
 鎖定有效範圍位置。  
+* **啟動狀態檢測**  
+若不勾起，Active Region 物件為停用時，仍會視為有效的 Active Region。  
+* **使用世界空間邊界**  
+無視 Active Region 本身的 Transform，僅讀取範圍盒。可稍微減輕效能。  
+![image](../resources/images/r1CIWFx_Ml.png)  
+
+#### Audio Source Configurator  
+該元件負責統整 2.0 / 5.1 音源組的位置、衰減距離設定。  
+* **Audio Sources**  
+設定要調整的音源  
+* **進距離邊界**  
+玩家進入該範圍中，所有音源輸出音量皆為原始音量。  
+* **遠距離邊界**  
+玩家離開該範圍後，即聽不到這些音源。  
+* **估算**  
+根據目前規劃的音場範圍，計算適合的邊界衰減設定。  
+* **套用**  
+將相關設定套用至音源。  
 
 ---
 ## 特殊應用  
@@ -310,11 +472,13 @@ VizVid 用螢幕，可與控制器分開放置。
 
 > [!Note]
 > 需注意，VRC Light Volume 需要使用支援的著色器，才可正常顯示效果。  
+> 請參考[該說明文件](https://github.com/REDSIM/VRCLightVolumes/blob/main/Documentation/CompatibleShaders.md)，選擇適合的著色器。  
 
 ### 影音串流相關  
 不少串流類型表演活動，為了達成低延遲，經常會使用外部 RTMP/RTSP 服務，將影音內容串流至 VRChat 中。  
 VizVid 提供以下三種方式套用串流網址。  
 以下以 [TopazChat](https://github.com/TopazChat/TopazChat) 舉例。  
+
 #### Stream Key Assigner<a id="streamkeyassigner"></a>  
 可自動為串流服務，生成、套用串流金鑰。  
 ![image](../resources/images/H1w9i-w7-g.png)
@@ -333,7 +497,7 @@ VizVid 提供以下三種方式套用串流網址。
 * **替代串流網址模板**  
 供行動平台用替代網址，預設使用 TopazChat 服務，請跟上方網址使用相同伺服器。  
 > [!Note]
-> `{0}` 為串流金鑰唯一 ID 套用處，請記得保留於模板中。
+> `{0}` 為串流金鑰唯一 ID 套用處，請務必保留於模板中。
 * **金鑰數量**  
 欲產生的金鑰數量  
 * **唯一 ID 長度**  
@@ -360,32 +524,37 @@ VizVid 提供以下三種方式套用串流網址。
 ![image](../resources/images/rkDVnbPXWg.png)  
 4. 完成！  
 
+#### 立體聲道配置  
+因應世界創作者的需求，可能會需要 VizVid 輸出有方位的立體聲配置。  
+可依照以下方法進行設定：  
+1. 透過選單新增 `Audio Source (Stereo)` 後，會自動對應至 VizVid。  
+2. 根據場景需求，調整圖片中黃色線條範圍，設定音源位置。  
+![image](../resources/images/HJxdTYeOfg.png)  
+3. 點選 <kbd>估算</kbd> 重新調整衰減設定。  
+詳細設定可參考 [Audio Source Configurator ](#audio-source-configurator)  
+4. 點選 <kbd>套用</kbd> 將設定套用至音源。  
+5. 完成。  
+
 #### 5.1 聲道配置  
 VRChat 的 AVPro 後端，可以在 VRChat 提供 5.1 環繞音效的聲音輸出。  
 常應用於電影院等場景。  
-透過選單新增 `Audio Source (5.1 Surround)` 後，會自動對應至 VizVid。  
-最後依需求調整 Audio Source 位置即可。  
-![image](../resources/images/By3PPiBXbx.png)  
+1. 透過選單新增 `Audio Source (5.1 Surround)` 後，會自動對應至 VizVid。  
+2. 根據場景需求，調整圖片中黃色框線範圍，設定音源位置。  
+![image](../resources/images/H1sKewJ_zl.png)  
+3. 點選 <kbd>估算</kbd> 重新調整衰減設定。  
+詳細設定可參考 [Audio Source Configurator ](#audio-source-configurator)  
+4. 點選 <kbd>套用</kbd> 將設定套用至音源。  
+5. 完成。  
+
+> [!note]
+> 因 Builtin 後端技術限制，無法支援多個 Audio Source，可能導致聲音會只從左方發出。  
+> 使用時請依照需求，針對 Builtin 後端進行相應調整。  
 
 ### 顯示相關  
-#### 更改觸控是螢幕預設解鎖模式  
-VizVid 預設為經典解鎖模式。  
-若想預設使用全螢幕解鎖模式，可以透過以下方法更改：  
-1. 根據附圖，於 Screen With Overlay 物件中，找到 FullScreen 物件。  
-2. 於 Inspector 的 Lazy Switch 中，勾起 `狀態1` 即可。  
-![image](../resources/images/ryhckgN2Zx.png)  
-3. 完成。  
-
-> [!Note]  
-> 該設定會連動場景內所有的觸控螢幕控制模式。若要解除連動，刪除 `持久性鍵` 即可。  
-
-> [!Note]  
-> 為避免連動設定無法正確儲存，若場景內有多個觸控型螢幕，請全數進行更改。  
-
 #### 反轉播放清單排序  
 若想將 VizVid 播放清單調整為舊版的倒序排列，可以透過以下方法更改：  
 1. 於播放清單物件中，找到 `Play List Entries` 物件。  
-    > [!Note]  
+    > [!Note]
     > On-Screen Controls 與 Seperated Controls 的位置略有不同。  
     > ![image](../resources/images/r11e9x4hZx.png)  
 2. 於 Inspector 中，找到 `Pooled Scroll View` 元件。  
@@ -425,7 +594,7 @@ VizVid 的語言管理元件，是位於 Locale 物件中的 Language Manager。
 ![image](../resources/images/rJFl6WvXZl.png)  
 
 ### API Reference  
-請參考[本頁面](../api/Global.html)，串接需要的功能至 VizVid。  
+請參考[本頁面](../api/JLChnToZ.VRC.VVMW.html)，串接需要的功能至 VizVid。  
 
 
 ---

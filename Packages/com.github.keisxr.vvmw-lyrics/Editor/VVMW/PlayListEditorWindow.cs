@@ -15,6 +15,7 @@ using JLChnToZ.VRC.Foundation.ThirdParties.LitJson;
 
 using UnityObject = UnityEngine.Object;
 using FUtils = JLChnToZ.VRC.Foundation.Editors.Utils;
+using JLChnToZ.VRC.Foundation;
 
 namespace JLChnToZ.VRC.VVMW.Editors {
 
@@ -22,16 +23,16 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         static EditorI18N i18n;
         FrontendHandler frontendHandler;
         Core loadedCore;
-        string[] playerHandlerNames;
-        PlayerType[] playerHandlerTypes;
-        string[] localeCodes, localeDisplayNames;
-        int selectedLocaleIndex = -2;
-        int firstUnityPlayerIndex = -1, firstAvProPlayerIndex = -1;
+        [NonSerialized] string[] playerHandlerNames;
+        [NonSerialized] PlayerType[] playerHandlerTypes;
+        [NonSerialized] string[] localeCodes, localeDisplayNames;
+        [NonSerialized] int selectedLocaleIndex = -2;
+        [NonSerialized] int firstUnityPlayerIndex = -1, firstAvProPlayerIndex = -1;
         [SerializeField] List<PlayList> playLists = new List<PlayList>();
-        ReorderableList playListView;
-        ReorderableList playListEntryView;
+        [NonSerialized] ReorderableList playListView;
+        [NonSerialized] ReorderableList playListEntryView;
         [NonSerialized] PlayList selectedPlayList;
-        bool isDirty;
+        [NonSerialized] bool isDirty;
         Vector2 playListViewScrollPosition, playListEntryViewScrollPosition;
         const string DefaultLyricsEndpoint = "https://k3isd.net/lrc";
         const string NomSeekVrcUrlBase = "https://api.u2b.cx/vrcurl";
@@ -238,6 +239,11 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         void DrawPlayListHeader(Rect rect) => EditorGUI.LabelField(rect, i18n.GetOrDefault("PlaylistEditor.playLists"), EditorStyles.boldLabel);
 
         void DrawPlayList(Rect rect, int index, bool isActive, bool isFocused) {
+            var evt = Event.current;
+            if (evt.type == EventType.MouseDown && rect.Contains(evt.mousePosition) && playListView.index != index) {
+                playListView.index = index;
+                PlayListSelected(playListView);
+            }
             var playList = playLists[index];
             if (playListView.index == index) selectedPlayList = playList;
             using (var changed = new EditorGUI.ChangeCheckScope()) {
@@ -574,15 +580,17 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         #region Playlist Importers
-        void HandlePlayListObjectDrop(bool creaeNewPlayList = false) {
+        void HandlePlayListObjectDrop(bool createNewPlayList = false) {
             DragAndDrop.AcceptDrag();
             UpdatePlayerHandlerInfos();
             var queue = new Queue<UnityObject>(DragAndDrop.objectReferences);
-            while (queue.Count > 0) {
-                var obj = queue.Dequeue();
+            while (queue.TryDequeue(out var obj)) {
                 if (obj is GameObject gameObject) {
-                    foreach (var component in gameObject.GetComponents<MonoBehaviour>())
-                        queue.Enqueue(component);
+                    using (PooledObjectExtensions.Get(out List<MonoBehaviour> components)) {
+                        gameObject.GetComponentsInChildren(true, components);
+                        foreach (var component in components)
+                            queue.Enqueue(component);
+                    }
                     continue;
                 }
                 if (obj is MonoBehaviour mb) {
@@ -592,33 +600,33 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                             AppendPlaylist(obj);
                             break;
                         case "UdonSharp.Video.USharpVideoPlayer":
-                            ImportPlayListFromUSharpVideo(mb, creaeNewPlayList);
+                            ImportPlayListFromUSharpVideo(mb, createNewPlayList);
                             break;
                         case "Yamadev.YamaStream.Script.PlayList":
-                            ImportPlayListFromYamaPlayer(mb, creaeNewPlayList);
+                            ImportPlayListFromYamaPlayer(mb, createNewPlayList);
                             break;
                         case "Kinel.VideoPlayer.Scripts.KinelPlaylistGroupManagerScript":
-                            ImportPlayListGroupFromKienL(mb, creaeNewPlayList);
+                            ImportPlayListGroupFromKienL(mb, createNewPlayList);
                             break;
                         case "Kinel.VideoPlayer.Scripts.KinelPlaylistScript":
-                            ImportPlayListFromKinel(mb, creaeNewPlayList);
+                            ImportPlayListFromKinel(mb, createNewPlayList);
                             break;
                         case "HoshinoLabs.IwaSync3.Playlist":
-                            ImportPlayListFromIwaSync3(mb, creaeNewPlayList);
+                            ImportPlayListFromIwaSync3(mb, createNewPlayList);
                             break;
                         case "ArchiTech.Playlist":
                         case "ArchiTech.PlaylistData":
-                            ImportPlayListFromProTV(mb, 2, creaeNewPlayList);
+                            ImportPlayListFromProTV(mb, 2, createNewPlayList);
                             break;
                         case "ArchiTech.ProTV.Playlist":
                         case "ArchiTech.ProTV.PlaylistData":
-                            ImportPlayListFromProTV(mb, 3, creaeNewPlayList);
+                            ImportPlayListFromProTV(mb, 3, createNewPlayList);
                             break;
                         case "Texel.PlaylistData":
-                            ImportPlayListFromTXL(mb, creaeNewPlayList);
+                            ImportPlayListFromTXL(mb, createNewPlayList);
                             break;
                         case "JTPlaylist.Udon.JTPlaylist":
-                            ImportPlayListFromJT(mb, creaeNewPlayList);
+                            ImportPlayListFromJT(mb, createNewPlayList);
                             break;
                     }
                 }

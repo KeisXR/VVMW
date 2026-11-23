@@ -39,6 +39,21 @@
             "name": "at.pimaker.ltcgi",
             "expression": "",
             "define": "LTCGI_IMPORTED"
+        },
+        {
+            "name": "red.sim.lightvolumes",
+            "expression": "2",
+            "define": "VRCLV2_IMPORTED"
+        },
+        {
+            "name": "red.sim.lightvolumes",
+            "expression": "3",
+            "define": "VRCLV3_IMPORTED"
+        },
+        {
+            "name": "red.sim.lightvolumes",
+            "expression": "3.0.0-dev.12",
+            "define": "VRCLV3_IMPORTED"
         }
     ],
     "noEngineReferences": false

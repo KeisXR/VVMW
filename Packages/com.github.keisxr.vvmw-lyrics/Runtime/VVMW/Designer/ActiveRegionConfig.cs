@@ -63,16 +63,16 @@ namespace JLChnToZ.VRC.VVMW {
 
         void OnValidate() {
 #if UNITY_EDITOR && !COMPILER_UDONSHARP
-            if (core == lastCore) return;
-            if (EditorApplication.isPlayingOrWillChangePlaymode ||
+            if (!gameObject.scene.IsValid() || core == lastCore ||
+                EditorApplication.isPlayingOrWillChangePlaymode ||
                 PrefabStageUtility.GetCurrentPrefabStage() != null)
                 return;
             EditorApplication.delayCall += UpdateValue;
 #endif
         }
 
-        void UpdateValue() {
-            if (core == lastCore) return;
+        internal void UpdateValue() {
+            if (!gameObject.scene.IsValid() || core == lastCore) return;
             EnsureActiveRegionManagerExists();
             if (lastCore != null) {
                 if (regionConfigTable.TryGetValue(lastCore, out var set)) {

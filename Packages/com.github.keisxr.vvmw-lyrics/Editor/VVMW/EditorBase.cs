@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEditor;
 using UdonSharp;
 using UdonSharpEditor;
+using JLChnToZ.VRC.Foundation;
 using JLChnToZ.VRC.Foundation.I18N;
 using JLChnToZ.VRC.Foundation.Editors;
 using JLChnToZ.VRC.Foundation.I18N.Editors;
@@ -17,15 +18,19 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         const string fontGUID = "088cf7162d0a81c46ad54028cfdcb382";
         const string listingsID = "idv.jlchntoz.xtlcdn-listing";
         const string listingsURL = "https://xtlcdn.github.io/vpm/index.json";
+        const string documentationURL = "https://xtlcdn.github.io/VizVid/docs/";
+        const string discordServerURL = "https://discord.gg/fkDueQMbj8";
         protected static readonly Dictionary<Type, (FieldInfo fieldInfo, Type editorType)> controllableTypes = new Dictionary<Type, (FieldInfo, Type)>();
         protected static readonly Dictionary<Type, Type> editorTypes = new Dictionary<Type, Type>();
-        static readonly List<MonoBehaviour> behaviours = new List<MonoBehaviour>();
+        readonly Dictionary<string, (string key, bool shown)> foldoutStates = new Dictionary<string, (string, bool)>();
+        static readonly GUIContent[] buttonBar = new[] { new GUIContent(), new GUIContent(), new GUIContent() };
         static Texture2D bannerTexture;
         static PackageSelfUpdater selfUpdater;
         static Font font;
         static GUIStyle versionLabelStyle;
         protected static EditorI18N i18n;
         bool isUdonSharp;
+        bool firstRun;
 
         [InitializeOnLoadMethod]
         static void Init() {
@@ -99,28 +104,18 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         if (controllableTypes.TryGetValue(inspectedType, out var value))
                             controllableTypes[inspectedType] = (value.fieldInfo, type);
                         editorTypes[inspectedType] = type;
-                        if ((bool)editorForChildClassesField.GetValue(customEditorAttribute)) {
+                        if ((bool)editorForChildClassesField.GetValue(customEditorAttribute))
                             inheritedEditors[inspectedType] = type;
-                            foreach (var pType in processedTypes) {
-                                int baseScore = 0, currentScore = 0;
-                                if (editorTypes.TryGetValue(pType, out var editorType)) {
-                                    for (var bt = pType; bt != null; bt = bt.BaseType) {
-                                        if (bt == editorType) break;
-                                        baseScore--;
-                                    }
-                                } else
-                                    baseScore = int.MinValue;
-                                for (var bt = pType; bt != null; bt = bt.BaseType) {
-                                    if (bt == inspectedType) {
-                                        if (currentScore > baseScore) editorTypes[pType] = type;
-                                        break;
-                                    }
-                                    currentScore--;
-                                }
-                            }
-                        }
                     }
                 }
+            foreach (var type in processedTypes) {
+                if (editorTypes.ContainsKey(type)) continue;
+                for (var t = type.BaseType; t != null; t = t.BaseType)
+                    if (inheritedEditors.TryGetValue(t, out var editorType)) {
+                        editorTypes[type] = editorType;
+                        break;
+                    }
+            }
         }
 
         protected virtual void OnEnable() {
@@ -141,6 +136,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
 #endif
             i18n = EditorI18N.Instance;
             isUdonSharp = target is UdonSharpBehaviour;
+            firstRun = true;
         }
 
         protected virtual void OnDisable() {
@@ -151,29 +147,32 @@ namespace JLChnToZ.VRC.VVMW.Editors {
 
         protected bool GetFirstVizVidComponent(out IVizVidCompoonent firstComponent) {
             if (targets.Length == 1)
-                foreach (var b in behaviours)
-                    if (b is IVizVidCompoonent) {
-                        firstComponent = b as IVizVidCompoonent;
-                        return b == target;
-                    }
+                using (PooledObjectExtensions.Get(out List<MonoBehaviour> behaviours)) {
+                    (target as Component).gameObject.GetComponents(behaviours);
+                    foreach (var b in behaviours)
+                        if (b is IVizVidCompoonent) {
+                            firstComponent = b as IVizVidCompoonent;
+                            return b == target;
+                        }
+                }
             firstComponent = null;
             return false;
         }
 
         public override void OnInspectorGUI() {
-            (target as Component).GetComponents(behaviours);
-            foreach (var b in behaviours)
-                if (editorTypes.ContainsKey(b.GetType())) {
-                    if (b == target) DrawBanner();
-                    break;
-                }
-            if (GUILayout.Button(i18n.GetOrDefault("GlobalSettings"))) GlobalSettingsEditorWindow.ShowWindow();
+            using (PooledObjectExtensions.Get(out List<MonoBehaviour> behaviours)) {
+                (target as Component).gameObject.GetComponents(behaviours);
+                foreach (var b in behaviours)
+                    if (editorTypes.ContainsKey(b.GetType())) {
+                        if (b == target) DrawBanner();
+                        break;
+                    }
+            }
             if (isUdonSharp) {
                 using (new EditorGUILayout.VerticalScope(GUI.skin.box))
-                using (new EditorGUI.IndentLevelScope()) {
+                using (new EditorGUI.IndentLevelScope())
                     if (UdonSharpGUI.DrawDefaultUdonSharpBehaviourHeader(target, true, false))
                         return;
-                }
                 EditorGUILayout.Space();
             }
             DrawInspectorGUI();
@@ -182,7 +181,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         protected static void DrawBanner() {
             if (bannerTexture != null) {
                 var rect = GUILayoutUtility.GetRect(0, 120);
+#if !UNITY_6000_0_OR_NEWER
                 GUILayout.Space(rect.height);
+#endif
                 var bannerRect = new Rect(
                     rect.x + (rect.width - bannerTexture.width * rect.height / bannerTexture.height) / 2,
                     rect.y,
@@ -205,6 +206,15 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             I18NUtils.DrawLocaleField();
             selfUpdater.DrawUpdateNotifier();
             EditorGUILayout.Space();
+            i18n.GetLocalizedContent("GlobalSettings", buttonBar[0]);
+            i18n.GetLocalizedContent("Documentation", buttonBar[1]);
+            i18n.GetLocalizedContent("Discord", buttonBar[2]);
+            switch (GUILayout.Toolbar(-1, buttonBar)) {
+                case 0: GlobalSettingsEditorWindow.ShowWindow(); break;
+                case 1: Application.OpenURL(documentationURL); break;
+                case 2: Application.OpenURL(discordServerURL); break;
+            }
+            EditorGUILayout.Space();
         }
 
         public virtual void DrawInspectorGUI() {
@@ -214,12 +224,27 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         public virtual void DrawEmbeddedInspectorGUI() {
-            var iterator = serializedObject.GetIterator();
-            if (iterator.NextVisible(true))
-                do {
-                    if (iterator.propertyPath == "m_Script") continue;
-                    EditorGUILayout.PropertyField(iterator);
-                } while (iterator.NextVisible(false));
+            using var iterator = serializedObject.GetIterator();
+            if (!iterator.NextVisible(true)) return;
+            bool show = true;
+            do {
+                if (iterator.propertyPath == "m_Script") continue;
+                var propertyPath = iterator.propertyPath;
+                if (firstRun) {
+                    var fieldInfo = Utils.GetFieldInfoFromProperty(iterator, out _);
+                    var collapsableHeaderAttribute = fieldInfo?.GetCustomAttribute<CollapsableHeaderAttribute>();
+                    if (collapsableHeaderAttribute != null)
+                        if (!foldoutStates.ContainsKey(collapsableHeaderAttribute.key))
+                            foldoutStates[propertyPath] = (collapsableHeaderAttribute.key, false);
+                }
+                if (foldoutStates.TryGetValue(propertyPath, out var foldout)) {
+                    EditorGUILayout.Space();
+                    foldout.shown = show = EditorGUILayout.Foldout(foldout.shown, i18n.GetLocalizedContent(foldout.key), true, EditorStyles.foldoutHeader);
+                    foldoutStates[propertyPath] = foldout;
+                }
+                if (show) EditorGUILayout.PropertyField(iterator);
+            } while (iterator.NextVisible(false));
+            firstRun = false;
         }
     }
 }

@@ -1,11 +1,13 @@
-﻿using UnityEngine;
+﻿using System;
+using System.Collections.Generic;
+using UnityEngine;
 using VRC.SDKBase;
 using VRC.SDK3.Rendering;
 using VRC.Udon.Common.Interfaces;
 using UdonSharp;
 using JLChnToZ.VRC.Foundation;
 using JLChnToZ.VRC.Foundation.I18N;
-
+using JLChnToZ.VRC.VVMW.Designer;
 #if VRC_LIGHT_VOLUMES
 using VRCLightVolumes;
 #endif
@@ -18,22 +20,34 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, BindUdonSharpEvent(
             nameof(_OnTextureChanged),
             nameof(_OnTimeDrift)
-        ), Locatable, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core")] internal Core core;
+        ), Locatable, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core")]
+        internal Core core;
 #if VRC_LIGHT_VOLUMES
         [SerializeField, Resolve("/**")] LightVolumeManager lightVolumeManager;
         [SerializeField] internal LightVolumeInstance[] lightVolumes;
-#if VRC_LIGHT_VOLUMES_V2
+#if VRC_LIGHT_VOLUMES_V2 || VRCLV2_IMPORTED
         [SerializeField] internal PointLightVolumeInstance[] pointLightVolumes;
 #endif
+#if VRC_LIGHT_VOLUMES_V3 || VRCLV3_IMPORTED
+        [SerializeField, HideInInspector] internal PointLightVolumeInstance[] cookiePointLightVolumes;
+        [SerializeField, HideInInspector] internal bool needReadback;
 #endif
+#endif
+        bool hasInitialized;
         Texture videoTexture;
         Color32[] pixels;
         bool isRunning;
 
         void OnEnable() {
 #if VRC_LIGHT_VOLUMES
+#if VRC_LIGHT_VOLUMES_V3
+            if (needReadback) core.enableMipmap = true;
+#else
             core.enableMipmap = true;
-            _OnTextureChanged();
+#endif
+            SendCustomEventDelayedFrames(nameof(_OnTextureChanged), 0);
+            if (hasInitialized) return;
+            hasInitialized = true;
 #else
             Debug.LogWarning("[LightVolumeAdaptor] VRC Light Volumes are not imported. Please import the package to use this feature.");
             enabled = false;
@@ -41,6 +55,8 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void OnDisable() => SetColor(Color.black);
+
+        bool ShouldAutoUpdate() => !core.IsStatic && core.IsPlaying && !core.IsPaused;
 
         public override void OnVideoPlay() {
             if (!isRunning) _OnTextureChanged();
@@ -57,6 +73,9 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _OnTextureChanged() {
+#if VRC_LIGHT_VOLUMES_V3
+            UpdateTextureCookie();
+#endif
             if (!DoReadbackRequest() || isRunning) return;
             isRunning = true;
             SendCustomEventDelayedFrames(nameof(_DoReadbackRequest), 0);
@@ -73,6 +92,9 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         bool DoReadbackRequest() {
+#if VRC_LIGHT_VOLUMES_V3
+            if (!needReadback) return false;
+#endif
             if (!enabled || !gameObject.activeInHierarchy)
                 return false;
             videoTexture = core.VideoTexture;
@@ -81,7 +103,7 @@ namespace JLChnToZ.VRC.VVMW {
                 return false;
             }
             VRCAsyncGPUReadback.Request(videoTexture, videoTexture.mipmapCount - 1, TextureFormat.RGBA32, (IUdonEventReceiver)this);
-            return !core.IsStatic && core.IsPlaying && !core.IsPaused;
+            return ShouldAutoUpdate();
         }
 
         public override void OnAsyncGpuReadbackComplete(VRCAsyncGPUReadbackRequest request) {
@@ -125,11 +147,119 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
 #endif
         }
+
+#if VRC_LIGHT_VOLUMES_V3
+        void UpdateTextureCookie() {
+            if (!Utilities.IsValid(cookiePointLightVolumes)) return;
+            var length = cookiePointLightVolumes.Length;
+            if (length <= 0) return;
+            bool autoUpdate = ShouldAutoUpdate();
+            for (int i = 0; i < length; i++) {
+                var pointLightVolume = cookiePointLightVolumes[i];
+                if (Utilities.IsValid(pointLightVolume) &&
+                    (!autoUpdate || pointLightVolume.AutoUpdateCustomTexture != autoUpdate))
+                    pointLightVolume.SetCustomMaterial(pointLightVolume.CustomTextureMaterial, autoUpdate);
+            }
+        }
+#endif
     }
 
 #if !COMPILER_UDONSHARP
     partial class LightVolumeAdaptor : IVizVidCompoonent {
         Core IVizVidCompoonent.Core => core;
     }
+
+#if UNITY_EDITOR && VRC_LIGHT_VOLUMES_V3
+    partial class LightVolumeAdaptor : ISelfPreProcess {
+        public int Priority => 0;
+
+        public void PreProcess() {
+            using (PooledObjectExtensions.Get(out List<ScreenConfigurator> screenConfigurators)) {
+                foreach (var screenConfigurator in gameObject.scene.IterateAllComponents<ScreenConfigurator>()) {
+                    if (screenConfigurator == null || screenConfigurator.core != core)
+                        continue;
+                    screenConfigurators.Add(screenConfigurator);
+                }
+                var scaleModeId = Shader.PropertyToID("_ScaleMode");
+                var stereoShiftId = Shader.PropertyToID("_StereoShift");
+                var stereoExtendId = Shader.PropertyToID("_StereoExtend");
+                var aspectRatioId = Shader.PropertyToID("_AspectRatio");
+                if (screenConfigurators.Count > 0)
+                    using (PooledObjectExtensions.Get(out HashSet<PointLightVolumeInstance> cookiePLV, screenConfigurators.Count))
+                    using (PooledObjectExtensions.Get(out HashSet<PointLightVolumeInstance> dynamicCookiePLV, screenConfigurators.Count)) {
+                        foreach (var configurator in screenConfigurators) {
+                            if (configurator == null || configurator.coreIndex < 0)
+                                continue;
+                            var pointLightVolumeInstance = configurator.pointLightVolume;
+                            if (pointLightVolumeInstance == null || !cookiePLV.Add(pointLightVolumeInstance)) continue;
+                            var material = pointLightVolumeInstance.CustomTextureMaterial;
+                            if (material == null) continue;
+                            var targetMaterials = configurator.Renderer.sharedMaterials;
+                            var targetIndex = core.screenTargetIndeces[configurator.coreIndex];
+                            if (targetIndex >= 0 && targetIndex < targetMaterials.Length) {
+                                var targetMaterial = targetMaterials[targetIndex];
+                                if (targetMaterial != null) {
+                                    ShaderUtils.CopyMaterialIntegerProperty(material, targetMaterial, scaleModeId);
+                                    ShaderUtils.CopyMaterialVectorProperty(material, targetMaterial, stereoShiftId);
+                                    ShaderUtils.CopyMaterialVectorProperty(material, targetMaterial, stereoExtendId);
+                                    ShaderUtils.CopyMaterialFloatProperty(material, targetMaterial, aspectRatioId);
+                                }
+                            } else {
+                                bool hasScaleMode = false, hasStereoShift = false, hasStereoExtend = false, hasAspectRatio = false;
+                                foreach (var targetMaterial in targetMaterials) {
+                                    if (targetMaterial == null) continue;
+                                    if (!hasScaleMode) hasScaleMode = ShaderUtils.CopyMaterialIntegerProperty(material, targetMaterial, scaleModeId);
+                                    if (!hasStereoShift) hasStereoShift = ShaderUtils.CopyMaterialVectorProperty(material, targetMaterial, stereoShiftId);
+                                    if (!hasStereoExtend) hasStereoExtend = ShaderUtils.CopyMaterialVectorProperty(material, targetMaterial, stereoExtendId);
+                                    if (!hasAspectRatio) hasAspectRatio = ShaderUtils.CopyMaterialFloatProperty(material, targetMaterial, aspectRatioId);
+                                }
+                            }
+                            core.AddScreen(
+                                material, 0, -1,
+                                "_VideoTex",
+                                "_IsAVProVideo",
+                                core.screenTargetDefaultTextures[configurator.coreIndex],
+                                Vector4.zero
+                            );
+                            var defaultTexture = configurator.core.screenTargetDefaultTextures[configurator.coreIndex];
+                            pointLightVolumeInstance.AutoUpdateCustomTexture = defaultTexture != null && defaultTexture is RenderTexture;
+                            if (!pointLightVolumeInstance.AutoUpdateCustomTexture) dynamicCookiePLV.Add(pointLightVolumeInstance);
+                        }
+                        cookiePointLightVolumes = new PointLightVolumeInstance[dynamicCookiePLV.Count];
+                        dynamicCookiePLV.CopyTo(cookiePointLightVolumes);
+                    }
+            }
+            if (lightVolumes == null)
+                lightVolumes = Array.Empty<LightVolumeInstance>();
+            else if (lightVolumes.Length > 0)
+                using (PooledObjectExtensions.Get(out HashSet<LightVolumeInstance> lv, lightVolumes.Length)) {
+                    foreach (var l in lightVolumes) if (l != null) lv.Add(l);
+                    lightVolumes = new LightVolumeInstance[lv.Count];
+                    lv.CopyTo(lightVolumes);
+                }
+            if (pointLightVolumes == null)
+                pointLightVolumes = Array.Empty<PointLightVolumeInstance>();
+            else if (pointLightVolumes.Length > 0)
+                using (PooledObjectExtensions.Get(out HashSet<PointLightVolumeInstance> plv, pointLightVolumes.Length))
+                using (PooledObjectExtensions.Get(out HashSet<PointLightVolumeInstance> dplv, cookiePointLightVolumes.Length)) {
+                    dplv.UnionWith(cookiePointLightVolumes);
+                    foreach (var pl in pointLightVolumes) {
+                        if (pl == null) continue;
+                        if (pl.Cookie != null && (Array.IndexOf(core.screenTargets, pl.Cookie) >= 0 ||
+                            (pl.Cookie is CustomRenderTexture crt && Array.IndexOf(core.screenTargets, crt.material) >= 0)
+                        )) dplv.Add(pl);
+                        else if (!dplv.Contains(pl)) plv.Add(pl);
+                    }
+                    if (pointLightVolumes.Length != plv.Count)
+                        pointLightVolumes = new PointLightVolumeInstance[plv.Count];
+                    plv.CopyTo(pointLightVolumes);
+                    if (cookiePointLightVolumes == null || cookiePointLightVolumes.Length != dplv.Count)
+                        cookiePointLightVolumes = new PointLightVolumeInstance[dplv.Count];
+                    dplv.CopyTo(cookiePointLightVolumes);
+                }
+            needReadback = lightVolumes.Length > 0 || pointLightVolumes.Length > 0;
+        }
+    }
+#endif
 #endif
 }

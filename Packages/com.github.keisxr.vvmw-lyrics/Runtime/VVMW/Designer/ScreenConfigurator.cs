@@ -3,11 +3,18 @@ using System.Collections.Generic;
 using UnityEngine;
 using JLChnToZ.VRC.Foundation;
 using JLChnToZ.VRC.Foundation.I18N;
-
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using VRC.SDKBase;
 #endif
+#if VRC_LIGHT_VOLUMES && VRCLV2_IMPORTED
+using VRCLightVolumes;
+#if VRCLV3_IMPORTED
+using PointLightVolume = VRCLightVolumes.PointLightVolumeInstance;
+#endif
+#endif
+using UnityObject = UnityEngine.Object;
 
 namespace JLChnToZ.VRC.VVMW.Designer {
     [ExecuteInEditMode]
@@ -15,8 +22,10 @@ namespace JLChnToZ.VRC.VVMW.Designer {
     [HelpURL("https://xtlcdn.github.io/VizVid/docs/#screen-configurator")]
     [AddComponentMenu("VizVid/Components/Screen Configurator")]
     public class ScreenConfigurator : MonoBehaviour, IVizVidCompoonent {
+        internal static TryEstimatePlacementDelegate tryEstimatePlacement;
         static readonly List<MonoBehaviour> monoBehaviours = new List<MonoBehaviour>();
         static readonly Dictionary<(Renderer, int), ScreenConfigurator> instances = new Dictionary<(Renderer, int), ScreenConfigurator>();
+        readonly HashSet<HideIfIdleTextureAvailable> hideIfIdleTextureAvailableComponents = new HashSet<HideIfIdleTextureAvailable>();
         [SerializeField, Locatable, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core")] internal Core core;
         [SerializeField, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core.videoScreenTarget")] internal Renderer screenRenderer;
         [SerializeField] int targetMode = 1;
@@ -24,9 +33,13 @@ namespace JLChnToZ.VRC.VVMW.Designer {
         [SerializeField, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core.screenTargetPropertyNames")] string targetPropertyName = "_MainTex";
         [SerializeField, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core.avProPropertyNames")] string avProPropertyName = "_IsAVProVideo";
         [SerializeField, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core.screenTargetDefaultTextures")] Texture defaultTexture;
+#if VRC_LIGHT_VOLUMES && VRCLV3_IMPORTED
+        [SerializeField, LocalizedLabel] internal PointLightVolume pointLightVolume;
+#endif
         Renderer previousRenderer;
         Core previousCore;
         int lastIndex;
+        [SerializeField, HideInInspector] internal int coreIndex = -1;
         [NonSerialized] bool firstRun, isPendingApply;
 
         Core IVizVidCompoonent.Core => core;
@@ -52,13 +65,188 @@ namespace JLChnToZ.VRC.VVMW.Designer {
             }
         }
 
+        internal bool HasIdleTexture => core == null ? defaultTexture != null :
+            core.screenTargetDefaultTextures != null && coreIndex >= 0 &&
+            coreIndex < core.screenTargetDefaultTextures.Length &&
+            (core.screenTargetDefaultTextures[coreIndex] != null || core.defaultTexture != null
+#if UNITY_EDITOR
+            && AssetDatabase.GetAssetPath(core.defaultTexture) != "Packages/com.github.keisxr.vvmw-lyrics/Textures/Sprites/black.png"
+#endif
+            );
+
         public static ScreenConfigurator GetInstance(Renderer renderer, int index = -1) {
             if (renderer && instances.TryGetValue((renderer, index), out var instance))
                 return instance;
             return null;
         }
 
-#if UNITY_EDITOR
+        internal void RegisterHideIfIdleTextureAvailable(HideIfIdleTextureAvailable component) {
+            if (component == null) return;
+            hideIfIdleTextureAvailableComponents.Add(component);
+            component.ShouldHide = HasIdleTexture;
+        }
+
+        internal void UnregisterHideIfIdleTextureAvailable(HideIfIdleTextureAvailable component) {
+            if (component == null) return;
+            hideIfIdleTextureAvailableComponents.Remove(component);
+            component.ShouldHide = false;
+        }
+
+        internal static void NotifyDefaultTextureChanged(Renderer target, int index) {
+            if (instances.TryGetValue((target, index), out var instance)) {
+                bool hasIdleTexture = instance.HasIdleTexture;
+                foreach (var component in instance.hideIfIdleTextureAvailableComponents)
+                    if (component != null) component.ShouldHide = hasIdleTexture;
+            }
+        }
+
+#if UNITY_EDITOR && !COMPILER_UDONSHARP
+#if VRC_LIGHT_VOLUMES
+#if VRCLV2_IMPORTED
+        static LightVolumeAdaptor TryGetAttachedAdaptor(Core core, bool createIfNotFound = true) {
+            foreach (var adaptor in FindObjectsByType<LightVolumeAdaptor>(FindObjectsSortMode.None))
+                if (adaptor.core == core) {
+                    if (createIfNotFound) Undo.RegisterCompleteObjectUndo(adaptor, "Update Light Volume Adaptor");
+                    return adaptor;
+                }
+            if (!createIfNotFound) return null;
+#if !VRCLV3_IMPORTED
+            var lvSetup = FindAnyObjectByType<LightVolumeSetup>();
+            if (lvSetup == null) {
+                var go = new GameObject("Light Volume Manager", typeof(LightVolumeSetup));
+                go.TryGetComponent(out lvSetup);
+                lvSetup.SyncUdonScript();
+                Undo.RegisterCreatedObjectUndo(go, "Create Light Volume Manager");
+            }
+#else
+            var lvSetup = FindAnyObjectByType<LightVolumeManager>();
+            if (lvSetup == null) {
+                var go = new GameObject("Light Volume Manager", typeof(LightVolumeManager));
+                Undo.RegisterCreatedObjectUndo(go, "Create Light Volume Manager");
+            }
+#endif
+            var newAdaptorObject = new GameObject("Light Volume Adaptor", typeof(LightVolumeAdaptor));
+            newAdaptorObject.TryGetComponent(out LightVolumeAdaptor newAdaptor);
+            GameObjectUtility.SetParentAndAlign(newAdaptorObject, core.gameObject);
+            newAdaptor.core = core;
+            EditorUtility.SetDirty(newAdaptor);
+            Undo.RegisterCreatedObjectUndo(newAdaptorObject, "Create Light Volume Adaptor");
+            return newAdaptor;
+        }
+
+        public static PointLightVolume CreateLightVolume(Transform target, Core core, int subMeshIndex = -1) {
+            var adaptor = TryGetAttachedAdaptor(core);
+            var lv = CreateLightVolume(target, subMeshIndex);
+#if VRCLV2_IMPORTED
+            ref var array = ref adaptor.pointLightVolumes;
+            if (array == null || array.Length == 0)
+                array = new PointLightVolumeInstance[1];
+            else
+                Array.Resize(ref array, array.Length + 1);
+#if !VRCLV3_IMPORTED
+            lv.TryGetComponent(out array[^1]);
+#else
+            array[^1] = lv;
+#endif
+#endif
+            Undo.RecordObject(adaptor, "Assign Light Volume for Screen");
+            return lv;
+        }
+
+        static PointLightVolume CreateLightVolume(Transform target, int subMeshIndex = -1) {
+            var lvObject = new GameObject(GameObjectUtility.GetUniqueNameForSibling(target, "Light Volume for Screen"), typeof(PointLightVolume));
+            var lvTransform = lvObject.transform;
+            lvTransform.SetParent(target, false);
+            if (!TryEstimatePlacement(lvTransform, subMeshIndex)) {
+                if (target.TryGetComponent(out Renderer renderer)) {
+                    var bounds = renderer.localBounds;
+                    lvTransform.localPosition = bounds.center;
+                    lvTransform.localScale = bounds.size;
+                } else {
+                    lvTransform.localPosition = Vector3.zero;
+                    lvTransform.localScale = Vector3.one;
+                }
+                lvTransform.localRotation = Quaternion.Euler(0, 180, 0);
+            }
+            lvObject.TryGetComponent(out PointLightVolume lv);
+#if !VRCLV3_IMPORTED
+            lv.Type = PointLightVolume.LightType.AreaLight;
+            lv.Dynamic = target.GetComponentInParent<VRC_Pickup>(true) != null;
+            lv.SyncUdonScript();
+#else
+            lv.LightType = 2; // AreaLight
+            lv.IsDynamic = target.GetComponentInParent<VRC_Pickup>(true) != null;
+            lv.Intensity = 1F;
+            lv.Color = Color.white;
+#endif
+            Undo.RegisterCreatedObjectUndo(lvObject, "Create Light Volume for Screen");
+            return lv;
+        }
+
+        public static bool TryEstimatePlacement(Transform lvTransform, int subMeshIndex, bool undo = false) {
+            if (tryEstimatePlacement == null) return false;
+            var parent = lvTransform.parent;
+            if (parent == null || !parent.TryGetComponent(out Renderer renderer)) return false;
+            Mesh mesh = null;
+            if (renderer is MeshRenderer && parent.TryGetComponent(out MeshFilter mf)) {
+                mesh = mf.sharedMesh;
+            } else if (renderer is SkinnedMeshRenderer smr) {
+                mesh = smr.sharedMesh;
+            }
+            if (mesh == null || !mesh.isReadable || !tryEstimatePlacement(
+                mesh, subMeshIndex, renderer.localToWorldMatrix,
+                out var t, out var r, out var s)) return false;
+            if (undo) Undo.RecordObject(lvTransform, "Estimate Light Volume Placement");
+            lvTransform.SetPositionAndRotation(t, r);
+            var parentScale = parent.lossyScale;
+            s.x /= Mathf.Abs(parentScale.x);
+            s.y /= Mathf.Abs(parentScale.y);
+            s.z = (s.x + s.y) * 0.5F;
+            lvTransform.localScale = s;
+            return true;
+        }
+
+        public void CreateLightVolume() {
+#if VRCLV3_IMPORTED
+            if (pointLightVolume == null) {
+                TryGetAttachedAdaptor(core);
+                Undo.RecordObject(this, "Assign Light Volume for Screen");
+                pointLightVolume = CreateLightVolume(screenRenderer.transform, targetIndex);
+                if (PrefabUtility.IsPartOfPrefabInstance(this)) PrefabUtility.RecordPrefabInstancePropertyModifications(this);
+            }
+            EnsureLightVolumeCookie(pointLightVolume, screenRenderer.name);
+#else
+            CreateLightVolume(transform, core, targetIndex);
+#endif
+        }
+#endif
+
+#if VRCLV3_IMPORTED
+        internal static void EnsureLightVolumeCookie(PointLightVolume pointLightVolume, string name) {
+            var shader = Shader.Find("Hidden/JLChnToZ/VideoBlit (VRCLightVolumes Cookie)");
+            bool valueChanged = false;
+            if (shader != null && (!(pointLightVolume.Cookie is Material material) || material == null || material.shader != shader)) {
+                material = new Material(shader) { name = $"{name} Cookie Material" };
+                MaterialUtil.SaveMaterialAsAsset(material, "", "");
+                if (!valueChanged) {
+                    Undo.RecordObject(pointLightVolume, "Assign Cookie Material for Light Volume");
+                    valueChanged = true;
+                }
+                pointLightVolume.Cookie = material;
+            }
+            if (pointLightVolume.Color.maxColorComponent <= 0f) {
+                if (!valueChanged) {
+                    Undo.RecordObject(pointLightVolume, "Assign Color for Light Volume");
+                    valueChanged = true;
+                }
+                pointLightVolume.Color = Color.white;
+            }
+            if (valueChanged && PrefabUtility.IsPartOfPrefabInstance(pointLightVolume))
+                PrefabUtility.RecordPrefabInstancePropertyModifications(pointLightVolume);
+        }
+#endif
+#endif
+
         static void RemoveIndexFromArray<T>(ref T[] array, int index) {
             if (index < 0 || index >= array.Length) return;
             var newArray = new T[array.Length - 1];
@@ -94,7 +282,9 @@ namespace JLChnToZ.VRC.VVMW.Designer {
             if (core != null) return;
             var cores = FindObjectsOfType<Core>(true);
             foreach (var c in cores) {
-                if (c.screenTargets == null || Array.IndexOf(c.screenTargets, renderer) < 0) continue;
+                if (c.screenTargets == null) continue;
+                coreIndex = Array.IndexOf(c.screenTargets, renderer);
+                if (coreIndex < 0) continue;
                 Undo.RecordObject(this, "Screen Configurator");
                 core = c;
             }
@@ -143,7 +333,6 @@ namespace JLChnToZ.VRC.VVMW.Designer {
                     core = compoonent.Core;
                     break;
                 }
-            int index;
             if (previousCore != core) {
                 RemoveFromCore(previousCore, previousRenderer);
                 previousCore = core;
@@ -161,28 +350,28 @@ namespace JLChnToZ.VRC.VVMW.Designer {
                     return;
                 }
                 if (previousRenderer == null) previousRenderer = renderer;
-                index = Array.IndexOf(core.screenTargets, previousRenderer);
-                if (index < 0) {
+                coreIndex = Array.IndexOf(core.screenTargets, previousRenderer);
+                if (coreIndex < 0) {
                     AppendToCore(renderer);
                     return;
                 }
                 if (
-                    targetMode != core.screenTargetModes[index] ||
-                    targetIndex != core.screenTargetIndeces[index] ||
-                    targetPropertyName != core.screenTargetPropertyNames[index] ||
-                    avProPropertyName != core.avProPropertyNames[index] ||
-                    defaultTexture != core.screenTargetDefaultTextures[index]
+                    targetMode != core.screenTargetModes[coreIndex] ||
+                    targetIndex != core.screenTargetIndeces[coreIndex] ||
+                    targetPropertyName != core.screenTargetPropertyNames[coreIndex] ||
+                    avProPropertyName != core.avProPropertyNames[coreIndex] ||
+                    defaultTexture != core.screenTargetDefaultTextures[coreIndex]
                 ) {
                     Undo.RecordObject(this, "Screen Configurator");
-                    targetMode = core.screenTargetModes[index];
-                    targetIndex = core.screenTargetIndeces[index];
-                    targetPropertyName = core.screenTargetPropertyNames[index];
-                    avProPropertyName = core.avProPropertyNames[index];
-                    defaultTexture = core.screenTargetDefaultTextures[index];
+                    targetMode = core.screenTargetModes[coreIndex];
+                    targetIndex = core.screenTargetIndeces[coreIndex];
+                    targetPropertyName = core.screenTargetPropertyNames[coreIndex];
+                    avProPropertyName = core.avProPropertyNames[coreIndex];
+                    defaultTexture = core.screenTargetDefaultTextures[coreIndex];
                 }
                 if (previousRenderer != renderer) {
                     Undo.RecordObject(core, "Screen Configurator");
-                    core.screenTargets[index] = renderer;
+                    core.screenTargets[coreIndex] = renderer;
                 }
             } finally {
                 if (previousRenderer != renderer || lastIndex != targetIndex) {
@@ -199,6 +388,7 @@ namespace JLChnToZ.VRC.VVMW.Designer {
             if (core.screenTargets != null && core.screenTargets.Length > 0)
                 return false;
             Undo.RecordObject(core, "Screen Configurator");
+            coreIndex = 0;
             core.screenTargets = new[] { renderer };
             core.screenTargetModes = new[] { targetMode };
             core.screenTargetIndeces = new[] { targetIndex };
@@ -210,30 +400,34 @@ namespace JLChnToZ.VRC.VVMW.Designer {
         }
 
         void AppendToCore(Renderer renderer) {
-            int index = core.screenTargets.Length;
-            int size = index + 1;
+            coreIndex = core.screenTargets.Length;
+            int size = coreIndex + 1;
             Undo.RecordObject(core, "Screen Configurator");
             Array.Resize(ref core.screenTargets, size);
-            core.screenTargets[index] = renderer;
+            core.screenTargets[coreIndex] = renderer;
             Array.Resize(ref core.screenTargetModes, size);
-            core.screenTargetModes[index] = targetMode;
+            core.screenTargetModes[coreIndex] = targetMode;
             Array.Resize(ref core.screenTargetIndeces, size);
-            core.screenTargetIndeces[index] = targetIndex;
+            core.screenTargetIndeces[coreIndex] = targetIndex;
             Array.Resize(ref core.screenTargetPropertyNames, size);
-            core.screenTargetPropertyNames[index] = targetPropertyName;
+            core.screenTargetPropertyNames[coreIndex] = targetPropertyName;
             Array.Resize(ref core.avProPropertyNames, size);
-            core.avProPropertyNames[index] = avProPropertyName;
+            core.avProPropertyNames[coreIndex] = avProPropertyName;
             Array.Resize(ref core.screenTargetDefaultTextures, size);
-            core.screenTargetDefaultTextures[index] = defaultTexture;
+            core.screenTargetDefaultTextures[coreIndex] = defaultTexture;
             SaveCoreModifications();
         }
 
-        static void SavePrefabModifications(UnityEngine.Object obj) {
+        static void SavePrefabModifications(UnityObject obj) {
             if (PrefabUtility.IsPartOfPrefabInstance(obj))
                 PrefabUtility.RecordPrefabInstancePropertyModifications(obj);
         }
 
         void SaveCoreModifications() => SavePrefabModifications(core);
 #endif
+        internal delegate bool TryEstimatePlacementDelegate(
+            Mesh mesh, int subMeshIndex, Matrix4x4 objectToWorld,
+            out Vector3 localPosition, out Quaternion localRotation, out Vector3 localScale
+        );
     }
 }

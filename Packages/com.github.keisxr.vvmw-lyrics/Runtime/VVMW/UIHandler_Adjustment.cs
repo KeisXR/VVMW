@@ -2,16 +2,16 @@ using VRC.SDKBase;
 
 namespace JLChnToZ.VRC.VVMW {
     public partial class UIHandler {
-        void InitShiftControl() {
-            bool isSyncedAndUnlocked = core.IsSynced && wasUnlocked;
-            if (Utilities.IsValid(shiftControlsRoot)) shiftControlsRoot.SetActive(isSyncedAndUnlocked);
+        void InitSpeedAndShiftControl() {
+            bool isSynced = core.IsSynced;
+            if (Utilities.IsValid(shiftControlsRoot)) shiftControlsRoot.SetActive(isSynced);
             else {
-                if (Utilities.IsValid(shiftBackLButtonObject)) shiftBackLButtonObject.SetActive(isSyncedAndUnlocked);
-                if (Utilities.IsValid(shiftBackSButtonObject)) shiftBackSButtonObject.SetActive(isSyncedAndUnlocked);
-                if (Utilities.IsValid(shiftForwardSButtonObject)) shiftForwardSButtonObject.SetActive(isSyncedAndUnlocked);
-                if (Utilities.IsValid(shiftForwardLButtonObject)) shiftForwardLButtonObject.SetActive(isSyncedAndUnlocked);
-                if (Utilities.IsValid(shiftResetButtonObject)) shiftResetButtonObject.SetActive(isSyncedAndUnlocked);
-                if (Utilities.IsValid(shiftOffsetObject)) shiftOffsetObject.SetActive(isSyncedAndUnlocked);
+                if (Utilities.IsValid(shiftBackLButtonObject)) shiftBackLButtonObject.SetActive(isSynced);
+                if (Utilities.IsValid(shiftBackSButtonObject)) shiftBackSButtonObject.SetActive(isSynced);
+                if (Utilities.IsValid(shiftForwardSButtonObject)) shiftForwardSButtonObject.SetActive(isSynced);
+                if (Utilities.IsValid(shiftForwardLButtonObject)) shiftForwardLButtonObject.SetActive(isSynced);
+                if (Utilities.IsValid(shiftResetButtonObject)) shiftResetButtonObject.SetActive(isSynced);
+                if (Utilities.IsValid(shiftOffsetObject)) shiftOffsetObject.SetActive(isSynced);
             }
         }
 

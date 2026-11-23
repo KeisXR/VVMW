@@ -13,7 +13,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         Vector4 normalST = new Vector4(1, 1, 0, 0), flippedST = new Vector4(1, -1, 0, 1);
         Rect normalRect = new Rect(0, 0, 1, 1), flippedRect = new Rect(0, 1, 1, -1);
-        [SerializeField, LocalizedLabel] Texture defaultTexture;
+        [SerializeField, LocalizedLabel] internal Texture defaultTexture;
         [SerializeField, LocalizedLabel] Material blitMaterial;
         [SerializeField] internal int screenCount;
         [SerializeField] internal Object[] screenTargets;
@@ -33,7 +33,7 @@ namespace JLChnToZ.VRC.VVMW {
         bool enableMipmap;
         int[] screenTargetPropertyIds, avProPropertyIds;
         MaterialPropertyBlock screenTargetPropertyBlock;
-        int broadcastTextureId, mainTexSTPropertyId;
+        int broadcastTextureId, broadcastTextureSTId, mainTexSTPropertyId;
         DataDictionary screenSharedProperties;
         bool isBlitterRunning;
 
@@ -45,7 +45,10 @@ namespace JLChnToZ.VRC.VVMW {
         void StartBroadcastScreenTexture() {
             if (!broadcastScreenTexture || !IsActiveInternal) return;
             var videoTexture = VideoTexture;
-            if (Utilities.IsValid(videoTexture)) VRCShader.SetGlobalTexture(broadcastTextureId, videoTexture);
+            if (Utilities.IsValid(videoTexture)) {
+                VRCShader.SetGlobalTexture(broadcastTextureId, videoTexture);
+                VRCShader.SetGlobalVector(broadcastTextureSTId, activeHandler.IsAvPro ? flippedST : normalST);
+            }
         }
 
         void StopBroadcastScreenTexture() {
@@ -74,7 +77,10 @@ namespace JLChnToZ.VRC.VVMW {
                     }
                 }
             }
-            if (broadcastTextureId == 0) broadcastTextureId = VRCShader.PropertyToID(broadcastScreenTextureName);
+            if (!string.IsNullOrEmpty(broadcastScreenTextureName)) {
+                if (broadcastTextureId == 0) broadcastTextureId = VRCShader.PropertyToID(broadcastScreenTextureName);
+                if (broadcastTextureSTId == 0) broadcastTextureSTId = VRCShader.PropertyToID(broadcastScreenTextureName + "_ST");
+            }
             if (mainTexSTPropertyId == 0) mainTexSTPropertyId = VRCShader.PropertyToID("_MainTex_ST");
             SendCustomEventDelayedFrames(nameof(_OnTextureChanged), 0);
         }
@@ -328,6 +334,7 @@ namespace JLChnToZ.VRC.VVMW {
 #if !COMPILER_UDONSHARP && UNITY_EDITOR
         void DrawScreenGizmos() {
             for (int i = 0, ic = screenTargets.Length; i < ic; i++) {
+                if (screenTargets[i] == null) continue;
                 Gizmos.color = Color.HSVToRGB(i * 0.35F % 1F, 1F, 1F);
                 if (screenTargets[i] is MeshRenderer meshRenderer) {
                     if (meshRenderer.TryGetComponent(out MeshFilter meshFilter)) {

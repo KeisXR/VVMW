@@ -3,6 +3,10 @@ using UnityEngine;
 using UnityEditor;
 using JLChnToZ.VRC.VVMW.Editors;
 using JLChnToZ.VRC.Foundation.I18N.Editors;
+#if VRCLV3_IMPORTED
+using PointLightVolume = VRCLightVolumes.PointLightVolumeInstance;
+#endif
+
 namespace JLChnToZ.VRC.VVMW.Designer {
     [CustomEditor(typeof(ScreenConfigurator))]
     public class ScreenConfiguratorEditor : VVMWEditorBase {
@@ -14,6 +18,9 @@ namespace JLChnToZ.VRC.VVMW.Designer {
         SerializedProperty targetPropertyNameProperty, coreTargetPropertyNameProperty;
         SerializedProperty avProPropertyNameProperty, coreAvProPropertyNameProperty;
         SerializedProperty defaultTextureProperty, coreDefaultTextureProperty;
+#if VRCLV3_IMPORTED
+        SerializedProperty pointLightVolumeProperty;
+#endif
         int lastIndex = -1;
 
         protected override void OnEnable() {
@@ -25,6 +32,9 @@ namespace JLChnToZ.VRC.VVMW.Designer {
             targetPropertyNameProperty = serializedObject.FindProperty("targetPropertyName");
             avProPropertyNameProperty = serializedObject.FindProperty("avProPropertyName");
             defaultTextureProperty = serializedObject.FindProperty("defaultTexture");
+#if VRCLV3_IMPORTED
+            pointLightVolumeProperty = serializedObject.FindProperty("pointLightVolume");
+#endif
         }
 
         protected override void OnDisable() {
@@ -89,9 +99,33 @@ namespace JLChnToZ.VRC.VVMW.Designer {
                     avProPropertyNameProperty,
                     defaultTextureProperty
                 );
+            DrawExtraProperties();
+        }
+
+        public void DrawExtraProperties() {
+            var target = this.target as ScreenConfigurator;
+#if VRCLV3_IMPORTED
+            using (var changeCheck = new EditorGUI.ChangeCheckScope())
+            using (new EditorGUILayout.HorizontalScope()) {
+                EditorGUILayout.PropertyField(pointLightVolumeProperty);
+                var lv = pointLightVolumeProperty.objectReferenceValue as PointLightVolume;
+                if (lv == null) {
+                    if (GUILayout.Button(i18n.GetLocalizedContent("ScreenConfigurator.CreateLightVolume"), GUILayout.ExpandWidth(false)))
+                        target.CreateLightVolume();
+                } else if (GUILayout.Button(i18n.GetLocalizedContent("ScreenConfigurator.FixupLightVolume"), GUILayout.ExpandWidth(false)) || changeCheck.changed) {
+                    var renderer = screenRendererProperty.objectReferenceValue;
+                    ScreenConfigurator.EnsureLightVolumeCookie(lv, renderer != null ? renderer.name : target.name);
+                }
+            }
+#endif
             if (GUILayout.Button(i18n.GetLocalizedContent("ScreenConfigurator.FixupAspectRatio"))) {
                 var meshRenderer = screenRendererProperty.objectReferenceValue as MeshRenderer;
                 ScreenMeshUtils.TryFixupAspectRatioInMaterial(meshRenderer);
+#if VRCLV3_IMPORTED
+                var lv = pointLightVolumeProperty.objectReferenceValue as PointLightVolume;
+                if (lv != null)
+                    ScreenConfigurator.TryEstimatePlacement(lv.transform, targetIndexProperty.intValue, true);
+#endif
             }
         }
 
@@ -112,11 +146,13 @@ namespace JLChnToZ.VRC.VVMW.Designer {
                 ref mode, out var shader, out var materials
             );
             CoreEditor.DrawScreenMaterialOptions(
+                screenRendererProperty,
                 targetPropertyNameProperty,
                 avProPropertyNameProperty,
                 ref useST, shader, materials
             );
-            CoreEditor.DrawScreenTextureOptions(defaultTextureProperty);
+            if (CoreEditor.DrawScreenTextureOptions(defaultTextureProperty))
+                ScreenConfigurator.NotifyDefaultTextureChanged(renderer, targetIndexProperty.intValue);
             CoreEditor.SetScreenMode(targetModeProperty, mode, useST, blitFlags);
         }
 

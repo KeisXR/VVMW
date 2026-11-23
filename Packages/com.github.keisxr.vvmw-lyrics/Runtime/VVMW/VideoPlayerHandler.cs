@@ -31,17 +31,17 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, LocalizedLabel] string speedParameterName = "Speed";
         [SerializeField, LocalizedLabel] bool useSharedMaterial = true;
         [SerializeField, LocalizedLabel] AudioSource primaryAudioSource, primaryAudioSourceR;
-        [SerializeField, HideInInspector, Resolve(nameof(primaryAudioSource), NullOnly = false)] GameObject primaryAudioSourceGO;
+        [SerializeField, Resolve(nameof(primaryAudioSource), NullOnly = false)] GameObject primaryAudioSourceGO;
         [SerializeField, LocalizedLabel] bool useFlickerWorkaround = true;
         [SerializeField] bool isAvPro;
         [SerializeField, LocalizedLabel] Material blitMaterial;
         [SerializeField, LocalizedLabel] bool isLowLatency;
-        [SerializeField, HideInInspector] RateLimitResolver rateLimitResolver;
-        [SerializeField, HideInInspector, Resolve(".")] Animator animator;
-        [SerializeField, HideInInspector, Resolve(".")] BaseVRCVideoPlayer videoPlayer;
-        [SerializeField, HideInInspector, Resolve(".")] new Renderer renderer;
+        [SerializeField] RateLimitResolver rateLimitResolver;
+        [SerializeField, Resolve(".")] Animator animator;
+        [SerializeField, Resolve(".")] BaseVRCVideoPlayer videoPlayer;
+        [SerializeField, Resolve(".")] new Renderer renderer;
         RenderTexture bufferedTexture;
-        bool isWaitingForTexture, isReblitRunning, isLoadUrlRequested;
+        bool isWaitingForTexture, isReblitRunning, isLoadUrlRequested, isTexturePollScheduled, hasTexture;
         MaterialPropertyBlock propertyBlock;
         int texturePropertyID, speedParameterID;
         bool isRealTimeProtocol;
@@ -170,6 +170,11 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void OnEnable() {
+            Initialize();
+            if (isActive && !VRCUrl.IsNullOrEmpty(currentUrl)) LoadUrl();
+        }
+
+        void Initialize() {
             if (afterFirstRun) return;
             afterFirstRun = true;
             texturePropertyID = VRCShader.PropertyToID(texturePropertyName);
@@ -183,28 +188,49 @@ namespace JLChnToZ.VRC.VVMW {
                 renderer.sharedMaterial = renderer.material;
         }
 
+        void OnDisable() {
+            if (isActive) videoPlayer.Stop();
+        }
+
 #if COMPILER_UDONSHARP
         public
 #endif
         void _GetTexture() {
-            if (!isActive || !isWaitingForTexture || !videoPlayer.IsPlaying) {
+            isTexturePollScheduled = false;
+            if (!isActive || (isWaitingForTexture && !videoPlayer.IsPlaying)) {
                 isWaitingForTexture = false;
                 ClearTexture();
                 return;
             }
-            if (useSharedMaterial)
-                texture = renderer.sharedMaterial.GetTexture(texturePropertyID);
-            else {
-                if (!Utilities.IsValid(propertyBlock)) propertyBlock = new MaterialPropertyBlock();
-                renderer.GetPropertyBlock(propertyBlock);
-                texture = propertyBlock.GetTexture(texturePropertyID);
-            }
-            if (Utilities.IsValid(texture)) {
+            // Keep polling even if AVPro has destroyed the old texture during a resolution change.
+            if (!isWaitingForTexture && !hasTexture) return;
+            var current = ReadRendererTexture();
+            if (Utilities.IsValid(current) && (isWaitingForTexture || current != texture)) {
+                if (hasTexture)
+                    Debug.Log($"[VVMW] Video texture of {playerName} changed: {current.width}x{current.height}.");
+                texture = current;
                 isWaitingForTexture = false;
+                hasTexture = true;
+                if (Utilities.IsValid(bufferedTexture) &&
+                    (bufferedTexture.width != texture.width || bufferedTexture.height != texture.height)) {
+                    // The running blit loop recreates it at the new size on its next run.
+                    Debug.Log($"[VVMW] Released temporary render texture for {playerName}.");
+                    VRCRenderTexture.ReleaseTemporary(bufferedTexture);
+                    bufferedTexture = null;
+                }
                 BlitBufferScreen();
                 core._OnTextureChanged();
-            } else
-                SendCustomEventDelayedSeconds(nameof(_GetTexture), 0.2F);
+            }
+            isTexturePollScheduled = true;
+            SendCustomEventDelayedSeconds(nameof(_GetTexture), isWaitingForTexture ? 0.2F : 0.5F);
+        }
+
+        Texture ReadRendererTexture() {
+            if (useSharedMaterial)
+                return renderer.sharedMaterial.GetTexture(texturePropertyID);
+            if (!Utilities.IsValid(propertyBlock)) propertyBlock = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(propertyBlock);
+            return propertyBlock.GetTexture(texturePropertyID);
         }
 
         void BlitBufferScreen() {
@@ -288,9 +314,10 @@ namespace JLChnToZ.VRC.VVMW {
                 if (delay > 0) {
                     isLoadUrlRequested = true;
                     SendCustomEventDelayedSeconds(nameof(_DoLoadUrl), delay);
-                } else {
+                } else if (isActiveAndEnabled) {
                     loadedUrl = currentUrl;
                     videoPlayer.LoadURL(currentUrl);
+                    core._VideoBeginLoad();
                 }
             }
         }
@@ -300,10 +327,11 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _DoLoadUrl() {
             isLoadUrlRequested = false;
-            if (!isActive || VRCUrl.IsNullOrEmpty(currentUrl))
+            if (!isActive || VRCUrl.IsNullOrEmpty(currentUrl) || !isActiveAndEnabled)
                 return;
             loadedUrl = currentUrl;
             videoPlayer.LoadURL(currentUrl);
+            core._VideoBeginLoad();
         }
 
 #if COMPILER_UDONSHARP
@@ -377,7 +405,8 @@ namespace JLChnToZ.VRC.VVMW {
             if (isActive) core.OnVideoStart();
             if (!isWaitingForTexture) {
                 isWaitingForTexture = true;
-                _GetTexture();
+                // Reuse a pending poll rather than starting a second delayed-event chain.
+                if (!isTexturePollScheduled) _GetTexture();
             }
         }
 
@@ -416,7 +445,7 @@ namespace JLChnToZ.VRC.VVMW {
             isReady = false;
             if (!isActive) return;
             ClearTexture();
-            core.OnVideoEnd();
+            if (isActiveAndEnabled) core.OnVideoEnd();
         }
 
         public override void OnVideoLoop() {
@@ -452,7 +481,9 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void ClearTexture() {
+            isWaitingForTexture = false;
             texture = null;
+            hasTexture = false;
             if (Utilities.IsValid(bufferedTexture)) {
                 Debug.Log($"[VVMW] Released temporary render texture for {playerName}.");
                 VRCRenderTexture.ReleaseTemporary(bufferedTexture);

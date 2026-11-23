@@ -5,11 +5,11 @@ using UdonSharpEditor;
 using JLChnToZ.VRC.Foundation.Editors;
 using FUtils = JLChnToZ.VRC.Foundation.Editors.Utils;
 using JLChnToZ.VRC.Foundation.I18N.Editors;
+using System;
 
 namespace JLChnToZ.VRC.VVMW.Editors {
     [CustomEditor(typeof(FrontendHandler))]
     public class FrontendHandlerEditor : VVMWEditorBase {
-        static string[] loopModeNames = new string[3];
         SerializedProperty coreProperty;
         SerializedProperty lockedProperty;
         SerializedProperty defaultLoopProperty;
@@ -20,6 +20,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         SerializedProperty playListTitlesProperty;
         SerializedProperty autoPlayOnJoinProperty;
         SerializedProperty autoPlayOnIdleProperty;
+        SerializedProperty idleModeProperty;
         SerializedProperty autoPlayDelayProperty;
         SerializedProperty targetsProperty;
         SerializedProperty seedRandomBeforeShuffleProperty;
@@ -39,6 +40,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             playListTitlesProperty = serializedObject.FindProperty("playListTitles");
             autoPlayOnJoinProperty = serializedObject.FindProperty("autoPlayOnJoin");
             autoPlayOnIdleProperty = serializedObject.FindProperty("autoPlayOnIdle");
+            idleModeProperty = serializedObject.FindProperty("idleMode");
             autoPlayDelayProperty = serializedObject.FindProperty("autoPlayDelay");
             targetsProperty = serializedObject.FindProperty("targets");
             seedRandomBeforeShuffleProperty = serializedObject.FindProperty("seedRandomBeforeShuffle");
@@ -55,7 +57,6 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             }
             PlayListEditorWindow.OnFrontendUpdated -= OnFrontEndUpdated;
         }
-
 
         public override void DrawInspectorGUI() {
             serializedObject.Update();
@@ -80,18 +81,19 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             DrawExtraSettings(true);
         }
 
-        public void DrawCommonSettings(bool withHeader = false) {
+        public void DrawCommonSettings(bool withHeader = false, bool showAllSettings = true) {
             if (withHeader) EditorGUILayout.LabelField(i18n.GetLocalizedContent("JLChnToZ.VRC.VVMW.commonSettings"), EditorStyles.boldLabel);
             DrawPlaylistEditor();
-            DrawQueueListProperty();
-            DrawHistorySizeProperty();
+            if (showAllSettings) {
+                DrawQueueListProperty();
+                DrawHistorySizeProperty();
+            }
         }
 
-        public void DrawDefaultBehaviorSettings(bool withHeader = false) {
+        public void DrawDefaultBehaviorSettings(bool withHeader = false, bool showAllSettings = true) {
             if (withHeader) EditorGUILayout.LabelField(i18n.GetLocalizedContent("JLChnToZ.VRC.VVMW.defaultBehaviourSettings"), EditorStyles.boldLabel);
-            DrawAutoPlaySettings();
             DrawDefaultPlaylist();
-            DrawRepeatShuffleProperty();
+            DrawAutoPlaySettings(showAllSettings);
         }
 
         public void DrawExtraSettings(bool withHeader = false) {
@@ -158,52 +160,72 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             }
         }
 
-        public void DrawAutoPlaySettings() {
-            EditorGUILayout.PropertyField(autoPlayOnJoinProperty);
-            if (autoPlayOnJoinProperty.boolValue) {
-                EditorGUILayout.PropertyField(autoPlayDelayProperty);
-                if (autoPlayDelayProperty.floatValue < 0) autoPlayDelayProperty.floatValue = 0;
+        public void DrawAutoPlaySettings(bool showAllSettings = true) {
+            using (var changed = new EditorGUI.ChangeCheckScope()) {
+                EditorGUILayout.PropertyField(autoPlayOnJoinProperty);
+                if (changed.changed && autoPlayOnJoinProperty.boolValue) AutoAdjustDefaultPlaylist();
             }
-            EditorGUILayout.PropertyField(autoPlayOnIdleProperty);
+            if (!showAllSettings) return;
+            if (autoPlayOnJoinProperty.boolValue)
+                using (new EditorGUI.IndentLevelScope()) {
+                    EditorGUILayout.PropertyField(autoPlayDelayProperty);
+                    if (autoPlayDelayProperty.floatValue < 0) autoPlayDelayProperty.floatValue = 0;
+                }
+            using (var changed = new EditorGUI.ChangeCheckScope()) {
+                EditorGUILayout.PropertyField(idleModeProperty);
+                if (changed.changed && idleModeProperty.intValue > 0) AutoAdjustDefaultPlaylist();
+            }
+            if (autoPlayOnIdleProperty.boolValue && idleModeProperty.intValue == 0) {
+                idleModeProperty.intValue = 1;
+                autoPlayOnIdleProperty.boolValue = false;
+                AutoAdjustDefaultPlaylist();
+            }
         }
 
-        public void DrawRepeatShuffleProperty() {
-            var loopMode = LoopMode.None;
+        void AutoAdjustDefaultPlaylist() {
+            if (!serializedObject.isEditingMultipleObjects &&
+                playListNames.Length > 0 &&
+                defaultPlayListIndexProperty.intValue <= 0)
+                defaultPlayListIndexProperty.intValue = enableQueueListProperty.boolValue ? 1 : 0;
+        }
+
+
+        [Obsolete("Use DrawRepeatShuffleSettings instead.")]
+        public void DrawRepeatShuffleProperty() => DrawRepeatShuffleSettings();
+
+        public void DrawRepeatShuffleSettings(bool withHeader = false, bool showAllSettings = true) {
+            if (withHeader) EditorGUILayout.LabelField(i18n.GetLocalizedContent("JLChnToZ.VRC.VVMW.repeatShuffleSettings"), EditorStyles.boldLabel);
+            var loopMode = LoopMode.none;
             bool hasLoopOne = false;
             var core = coreProperty.objectReferenceValue as Core;
             if (core != null) {
                 hasLoopOne = core.Loop;
-                if (hasLoopOne) loopMode = LoopMode.SingleLoop;
+                if (hasLoopOne) loopMode = LoopMode.singleLoop;
             }
-            if (defaultLoopProperty.boolValue) loopMode = LoopMode.RepeatAll;
+            if (defaultLoopProperty.boolValue) loopMode = LoopMode.repeatAll;
             using (var changeCheck = new EditorGUI.ChangeCheckScope()) {
-                loopModeNames[0] = i18n.GetOrDefault("JLChnToZ.VRC.VVMW.FrontendHandler.loopMode.none");
-                loopModeNames[1] = i18n.GetOrDefault("JLChnToZ.VRC.VVMW.FrontendHandler.loopMode.singleLoop");
-                loopModeNames[2] = i18n.GetOrDefault("JLChnToZ.VRC.VVMW.FrontendHandler.loopMode.repeatAll");
+                var lenum = i18n.GetLocalizedEnum(typeof(LoopMode), "JLChnToZ.VRC.VVMW.FrontendHandler.loopMode");
                 loopMode = (LoopMode)EditorGUILayout.Popup(
-                    i18n.GetOrDefault("JLChnToZ.VRC.VVMW.FrontendHandler.loopMode"),
-                    (int)loopMode, loopModeNames
+                    i18n.GetLocalizedContent("JLChnToZ.VRC.VVMW.FrontendHandler.loopMode"),
+                    (int)loopMode, lenum.enumNames as GUIContent[]
                 );
-                if (changeCheck.changed || (hasLoopOne && loopMode == LoopMode.RepeatAll)) {
+                if (changeCheck.changed || (hasLoopOne && loopMode == LoopMode.repeatAll)) {
                     if (core != null)
                         using (var so = new SerializedObject(core)) {
-                            so.FindProperty("loop").boolValue = loopMode == LoopMode.SingleLoop;
+                            so.FindProperty("loop").boolValue = loopMode == LoopMode.singleLoop;
                             so.ApplyModifiedProperties();
                         }
-                    defaultLoopProperty.boolValue = loopMode == LoopMode.RepeatAll;
+                    defaultLoopProperty.boolValue = loopMode == LoopMode.repeatAll;
                 }
             }
             EditorGUILayout.PropertyField(defaultShuffleProperty);
-            EditorGUILayout.PropertyField(seedRandomBeforeShuffleProperty);
+            if (showAllSettings)
+                EditorGUILayout.PropertyField(seedRandomBeforeShuffleProperty);
         }
 
         void DrawLockProperty() {
             EditorGUILayout.PropertyField(lockedProperty);
-            using (new EditorGUILayout.HorizontalScope()) {
-                GUILayout.Label(i18n.GetOrDefault("JLChnToZ.VRC.VVMW.FrontendHandler.locked:hint"), GUILayout.ExpandWidth(false));
-                if (GUILayout.Button(i18n.GetOrDefault("JLChnToZ.VRC.VVMW.FrontendHandler.locked:hint_link"), EditorStyles.linkLabel, GUILayout.ExpandWidth(false)))
-                    Application.OpenURL("https://xtl.booth.pm/items/3826907");
-            }
+            Utils.RichHelpBox(string.Format(i18n.GetOrDefault("JLChnToZ.VRC.VVMW.FrontendHandler.locked:hint"), "https://xtl.booth.pm/items/3826907"));
         }
 
         void OnFrontEndUpdated(FrontendHandler handler) {
@@ -234,9 +256,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         enum LoopMode {
-            None,
-            SingleLoop,
-            RepeatAll,
+            none,
+            singleLoop,
+            repeatAll,
         }
     }
 }

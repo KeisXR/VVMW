@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using UdonSharp;
 using UnityEngine;
 using UnityEngine.UI;
@@ -9,7 +10,6 @@ using VRC.SDK3.Components;
 using VRC.SDK3.Components.Video;
 using JLChnToZ.VRC.Foundation;
 using JLChnToZ.VRC.Foundation.I18N;
-using UnityEngine.XR;
 
 namespace JLChnToZ.VRC.VVMW {
     /// <summary>
@@ -35,6 +35,7 @@ namespace JLChnToZ.VRC.VVMW {
             nameof(OnVideoEnd),
             nameof(OnVideoPause),
             nameof(OnVideoPlay),
+            nameof(OnVideoLoop),
             nameof(OnVideoReady),
             nameof(OnVideoStart)
         ), LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core")]
@@ -50,7 +51,7 @@ namespace JLChnToZ.VRC.VVMW {
         public FrontendHandler handler;
         [SerializeField, HideInInspector, BindUdonSharpEvent] LanguageManager languageManager;
 
-        [LocalizedHeader("HEADER:URL_Input")]
+        [CollapsableHeader("HEADER:URL_Input")]
         [BindEvent(nameof(VRCUrlInputField.onValueChanged), nameof(_OnURLChanged))]
         [BindEvent(nameof(VRCUrlInputField.onEndEdit), nameof(_OnURLEndEdit))]
         [SerializeField, LocalizedLabel] VRCUrlInputField urlInput;
@@ -79,7 +80,7 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, HideInInspector, Resolve(nameof(queueMode), NullOnly = false)] TextMeshProUGUI queueModeTMPro;
         [SerializeField, LocalizedLabel] GameObject otherObjectUnderUrlInput;
 
-        [LocalizedHeader("HEADER:Playback_Controls")]
+        [CollapsableHeader("HEADER:Playback_Controls")]
         [SerializeField, LocalizedLabel] Animator playbackControlsAnimator;
         [BindEvent(nameof(Button.onClick), nameof(_Play))]
         [SerializeField, LocalizedLabel] Button playButton;
@@ -137,7 +138,7 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, LocalizedLabel, BindUdonSharpEvent] RangeSlider abLoopSlider;
         [SerializeField, HideInInspector, Resolve(nameof(abLoopSlider), NullOnly = false)] GameObject abLoopSliderObject;
 
-        [LocalizedHeader("HEADER:Volume_Control")]
+        [CollapsableHeader("HEADER:Volume_Control")]
         [BindEvent("m_OnValueChanged", nameof(_OnVolumeSlide))]
         [SerializeField, LocalizedLabel] Slider volumeSlider;
         [BindEvent(nameof(Button.onClick), nameof(_OnMute))]
@@ -145,10 +146,10 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, HideInInspector, Resolve(nameof(muteButton), NullOnly = false)] GameObject muteButtonObject;
         [SerializeField, HideInInspector, Resolve(nameof(unmuteButton), NullOnly = false)] GameObject unmuteButtonObject;
 
-        [LocalizedHeader("HEADER:Idle_Screen")]
+        [CollapsableHeader("HEADER:Idle_Screen")]
         [SerializeField, LocalizedLabel] GameObject idleScreenRoot;
 
-        [LocalizedHeader("HEADEAR:Queue_List_PlayList")]
+        [CollapsableHeader("HEADEAR:Queue_List_PlayList")]
         [SerializeField, LocalizedLabel] GameObject playListPanelRoot;
         [SerializeField, LocalizedLabel, BindUdonSharpEvent] PooledScrollView playListScrollView;
         [SerializeField, HideInInspector, Resolve(nameof(playListScrollView), NullOnly = false)] GameObject playListGameObject;
@@ -177,7 +178,7 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, LocalizedLabel] GameObject historySelectedIndicator;
         [SerializeField, LocalizedLabel] bool autoHideCurrentPlayListButton = true;
 
-        [LocalizedHeader("HEADER:Sync_Offset_Controls")]
+        [CollapsableHeader("HEADER:Sync_Offset_Controls")]
         [SerializeField, LocalizedLabel] GameObject shiftControlsRoot;
         [BindEvent(nameof(Button.onClick), nameof(_ShiftBackL))]
         [SerializeField, LocalizedLabel, FormerlySerializedAs("shiftBack100msButton")] Button shiftBackLButton;
@@ -205,7 +206,7 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, HideInInspector, Resolve(nameof(performerDisplay), NullOnly = false)] Text performerText;
         [SerializeField, HideInInspector, Resolve(nameof(performerDisplay), NullOnly = false)] TextMeshProUGUI performerTMPro;
 
-        [LocalizedHeader("HEADER:Speed_Adjustment_Controls")]
+        [CollapsableHeader("HEADER:Speed_Adjustment_Controls")]
         [SerializeField, LocalizedLabel] GameObject speedControlsRoot;
         [BindEvent(nameof(Button.onClick), nameof(_SpeedDownL))]
         [SerializeField, LocalizedLabel] Button speedDownLButton;
@@ -226,7 +227,7 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, HideInInspector, Resolve(nameof(speedOffsetObject), NullOnly = false)] Text speedOffsetText;
         [SerializeField, HideInInspector, Resolve(nameof(speedOffsetObject), NullOnly = false)] TextMeshProUGUI speedOffsetTMPro;
 
-        [LocalizedHeader("HEADER:Screen_Controls")]
+        [CollapsableHeader("HEADER:Screen_Controls")]
         [BindEvent("m_OnValueChanged", nameof(_OnLuminanceSliderChanged))]
         [SerializeField, LocalizedLabel] Slider luminanceSlider;
         [SerializeField, LocalizedLabel] string luminancePropertyName = "_EmissionIntensity";
@@ -240,6 +241,7 @@ namespace JLChnToZ.VRC.VVMW {
         TimeSpan interactCoolDown = TimeSpan.FromSeconds(5);
         bool afterFirstRun;
         int initKey, playbackStateKey, enqueueKey;
+        Regex youtubeUrlRegex;
 
         void OnEnable() {
             ResolveCoreReference();
@@ -251,19 +253,21 @@ namespace JLChnToZ.VRC.VVMW {
                 }
                 playbackControlsAnimator.SetTrigger(initKey);
             }
-            if (afterFirstRun) return;
-            afterFirstRun = true;
-            joinTime = DateTime.UtcNow;
-            if (Utilities.IsValid(luminanceSlider) && !string.IsNullOrEmpty(luminancePropertyName)) {
-                luminancePropertyId = VRCShader.PropertyToID(luminancePropertyName);
-                _OnScreenSharedPropertiesChanged();
+            if (!afterFirstRun) {
+                afterFirstRun = true;
+                joinTime = DateTime.UtcNow;
+                youtubeUrlRegex = new Regex(@"^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                if (Utilities.IsValid(luminanceSlider) && !string.IsNullOrEmpty(luminancePropertyName)) {
+                    luminancePropertyId = VRCShader.PropertyToID(luminancePropertyName);
+                    _OnScreenSharedPropertiesChanged();
+                }
+                InitPlayQueueList();
+                InitPlayerSelect();
+                InitABLoopSlider();
+                if (Utilities.IsValid(playNextIndicator)) playNextIndicator.SetActive(false);
+                InitSpeedAndShiftControl();
             }
-            InitPlayQueueList();
-            InitPlayerSelect();
-            InitABLoopSlider();
             InitLyricsPanel();
-            if (Utilities.IsValid(playNextIndicator)) playNextIndicator.SetActive(false);
-            InitShiftControl();
             _OnUIUpdate();
             _OnVolumeChange();
             _OnSyncOffsetChange();
@@ -486,7 +490,13 @@ namespace JLChnToZ.VRC.VVMW {
                     switch (errorCode) {
                         case VideoError.InvalidURL: SetLocalizedText(statusText, statusTMPro, "InvalidURL"); break;
                         case VideoError.AccessDenied: SetLocalizedText(statusText, statusTMPro, core.IsTrusted ? "AccessDenied" : "AccessDeniedUntrusted"); break;
-                        case VideoError.PlayerError: SetLocalizedText(statusText, statusTMPro, "PlayerError"); break;
+                        case VideoError.PlayerError:
+                            var coreUrl = core.Url;
+                            SetLocalizedText(statusText, statusTMPro,
+                                !VRCUrl.IsNullOrEmpty(coreUrl) && youtubeUrlRegex.IsMatch(coreUrl.Get()) ?
+                                "PlayerErrorYoutube" : "PlayerError"
+                            );
+                            break;
                         case VideoError.RateLimited: SetLocalizedText(statusText, statusTMPro, "RateLimited"); break;
                         default: SetText(statusText, statusTMPro, string.Format(languageManager.GetLocale("Unknown"), (int)errorCode)); break;
                     }
@@ -565,7 +575,7 @@ namespace JLChnToZ.VRC.VVMW {
                     altUrlInput.interactable = unlocked;
                     if (!unlocked) altUrlInput.SetUrl(VRCUrl.Empty);
                 }
-                InitShiftControl();
+                InitSpeedAndShiftControl();
             }
             bool isRangeLooping = core.IsRangeLooping && Utilities.IsValid(repeatABButtonObject);
             if (hasHandler) {
@@ -647,6 +657,7 @@ namespace JLChnToZ.VRC.VVMW {
         public override void OnVideoStart() => _OnUIUpdate();
         public override void OnVideoPlay() => _OnUIUpdate();
         public override void OnVideoPause() => _OnUIUpdate();
+        public override void OnVideoLoop() => _OnUIUpdate();
         public override void OnVideoEnd() => _OnUIUpdate();
         public void _OnVideoError() => _OnUIUpdate();
         public void _OnVideoBeginLoad() => _OnUIUpdate();

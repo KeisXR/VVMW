@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Pool;
 using UnityEngine.SceneManagement;
 using UnityEditor.SceneManagement;
@@ -11,12 +12,16 @@ using Unity.Collections;
 using Unity.Burst;
 using JLChnToZ.VRC.Foundation;
 using static Unity.Mathematics.math;
+using static Unity.Mathematics.quaternion;
 
 namespace JLChnToZ.VRC.VVMW.Designer {
-
+    [InitializeOnLoad]
     public static class ScreenMeshUtils {
         const string fixupMenu = "Tools/VizVid/Fixup Aspect Ratios";
-        const string directory = "Assets/VizVid_Generated/";
+
+        static ScreenMeshUtils() {
+            ScreenConfigurator.tryEstimatePlacement = TryEstimatePlacement;
+        }
 
         [MenuItem(fixupMenu, priority = 1000)]
         static void MenuFixupAspectRatioInMaterial() =>
@@ -28,124 +33,378 @@ namespace JLChnToZ.VRC.VVMW.Designer {
 
         public static void TryFixupAspectRatioInMaterial(MeshRenderer meshRenderer) => TryFixupAspectRatioInMaterial(new[] { meshRenderer });
 
-        public static void TryFixupAspectRatioInMaterial(IEnumerable<MeshRenderer> renderers) {
-            using (DictionaryPool<MeshRenderer, Mesh>.Get(out var renderererMap))
+        public readonly struct MaterialPropertyOverride {
+            public readonly int propertyId;
+            public readonly ShaderPropertyType propertyType;
+            public readonly object value;
+
+            public MaterialPropertyOverride(int propertyId, ShaderPropertyType propertyType, object value) {
+                this.propertyId = propertyId;
+                this.propertyType = propertyType;
+                this.value = value;
+            }
+
+            public MaterialPropertyOverride(string propertyName, ShaderPropertyType propertyType, object value) : this(Shader.PropertyToID(propertyName), propertyType, value) { }
+
+            public MaterialPropertyOverride(string propertyName, float value) : this(Shader.PropertyToID(propertyName), ShaderPropertyType.Float, value) { }
+
+            public MaterialPropertyOverride(string propertyName, int value) : this(Shader.PropertyToID(propertyName), ShaderPropertyType.Int, value) { }
+
+            public MaterialPropertyOverride(string propertyName, Color value) : this(Shader.PropertyToID(propertyName), ShaderPropertyType.Color, value) { }
+
+            public MaterialPropertyOverride(string propertyName, Vector4 value) : this(Shader.PropertyToID(propertyName), ShaderPropertyType.Vector, value) { }
+
+            public MaterialPropertyOverride(string propertyName, Texture value) : this(Shader.PropertyToID(propertyName), ShaderPropertyType.Texture, value) { }
+        }
+
+        readonly struct MaterialPropertyKey : IEquatable<MaterialPropertyKey> {
+            readonly MaterialPropertyOverride[] properties;
+            readonly int hashCode;
+
+            public MaterialPropertyKey(MaterialPropertyOverride[] properties) {
+                this.properties = properties;
+                var hc = new HashCode();
+                foreach (var property in properties) {
+                    hc.Add(property.propertyId);
+                    hc.Add(property.propertyType);
+                    hc.Add(property.value);
+                }
+                hashCode = hc.ToHashCode();
+            }
+
+            public bool Equals(MaterialPropertyKey other) {
+                if (properties.Length != other.properties.Length) return false;
+                for (int i = 0; i < properties.Length; i++) {
+                    var a = properties[i];
+                    var b = other.properties[i];
+                    if (a.propertyId != b.propertyId ||
+                        a.propertyType != b.propertyType ||
+                        !Equals(a.value, b.value))
+                        return false;
+                }
+                return true;
+            }
+
+            public override bool Equals(object obj) => obj is MaterialPropertyKey other && Equals(other);
+
+            public override int GetHashCode() => hashCode;
+        }
+
+        public static bool TryFixupAspectRatioInMaterial(IEnumerable<Renderer> renderers) =>
+            TryFixupMaterialProperties(renderers, GetAspectRatioProperties, GetAspectRatioPostfix, "Fixup Aspect Ratio in Material");
+
+        static MaterialPropertyOverride[] GetAspectRatioProperties(Renderer renderer, int subMeshIndex) {
+            if (!renderer.TryGetComponent(out MeshFilter meshFilter)) return null;
+            var mesh = meshFilter.sharedMesh;
+            if (mesh == null || !mesh.isReadable || !TryEstimateAspectRatio(mesh, subMeshIndex, renderer.localToWorldMatrix, out var aspectRatio))
+                return null;
+            return new[] { new MaterialPropertyOverride("_AspectRatio", aspectRatio) };
+        }
+
+        static string GetAspectRatioPostfix(MaterialPropertyOverride[] properties) =>
+            $"_Adjusted_{HumanizeAspectRatio((float)properties[0].value)}";
+
+        public static bool TryFixupMaterialProperties(
+            IEnumerable<Renderer> renderers,
+            MaterialPropertyOverride[] properties,
+            string generatedMaterialPostfix = "_Adjusted"
+        ) {
+            var provider = new FixedMaterialPropertyProvider(properties, generatedMaterialPostfix);
+            return TryFixupMaterialProperties(renderers, provider.GetProperties, provider.GetGeneratedMaterialPostfix, "Fixup Aspect Ratio in Material");
+        }
+
+        sealed class FixedMaterialPropertyProvider {
+            readonly MaterialPropertyOverride[] properties;
+            readonly string generatedMaterialPostfix;
+
+            public FixedMaterialPropertyProvider(MaterialPropertyOverride[] properties, string generatedMaterialPostfix) {
+                this.properties = properties;
+                this.generatedMaterialPostfix = generatedMaterialPostfix;
+            }
+
+            public MaterialPropertyOverride[] GetProperties(Renderer renderer, int subMeshIndex) => properties;
+
+            public string GetGeneratedMaterialPostfix(MaterialPropertyOverride[] properties) => generatedMaterialPostfix;
+        }
+
+        public static bool TryFixupMaterialProperties(
+            IEnumerable<Renderer> renderers,
+            Func<Renderer, int, MaterialPropertyOverride[]> getProperties,
+            Func<MaterialPropertyOverride[], string> getGeneratedMaterialPostfix = null,
+            string undoName = "Fixup Material Properties"
+        ) {
+            bool materialListChanged = false;
+            getGeneratedMaterialPostfix ??= GetDefaultGeneratedMaterialPostfix;
+            using (HashSetPool<Renderer>.Get(out var renderererMap))
             using (HashSetPool<Material>.Get(out var materialsRequireAliasing))
-            using (DictionaryPool<(Material, float), List<(MeshRenderer, int)>>.Get(out var materialSourceMap))
-            using (ListPool<(string, Material, float)>.Get(out var generatedMaterials))
-            using (DictionaryPool<(Material, float), Material>.Get(out var materialAspectMap)) {
+            using (DictionaryPool<(Material, MaterialPropertyKey), List<(Renderer, int)>>.Get(out var materialSourceMap))
+            using (ListPool<(string, Material, MaterialPropertyOverride[])>.Get(out var generatedMaterials))
+            using (DictionaryPool<(Material, MaterialPropertyKey), Material>.Get(out var materialPropertyMap)) {
                 foreach (var r in renderers) {
-                    if (r == null ||
-                        renderererMap.ContainsKey(r) ||
-                        !r.TryGetComponent(out MeshFilter mf))
-                        continue;
-                    var mesh = mf.sharedMesh;
-                    if (mesh == null || !mesh.isReadable) continue;
-                    renderererMap.Add(r, mesh);
+                    if (r == null) continue;
+                    renderererMap.Add(r);
                 }
                 var prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
                 var scene = prefabStage != null ? prefabStage.scene : SceneManager.GetActiveScene();
                 foreach (var renderer in scene.IterateAllComponents<Renderer>()) {
-                    if (renderer is MeshRenderer mr && renderererMap.ContainsKey(mr))
+                    if (renderererMap.Contains(renderer))
                         continue;
                     foreach (var mat in renderer.sharedMaterials)
                         if (mat != null)
                             materialsRequireAliasing.Add(mat);
                 }
-                var aspectRatioID = Shader.PropertyToID("_AspectRatio");
-                foreach (var kv in renderererMap) {
-                    var mr = kv.Key;
-                    var mesh = kv.Value;
+                foreach (var mr in renderererMap) {
                     var materials = mr.sharedMaterials;
-                    var matrix = mr.localToWorldMatrix;
-                    List<(MeshRenderer, int)> sourceList = null;
                     for (int i = 0; i < materials.Length; i++) {
                         var mat = materials[i];
                         if (mat == null) continue;
-                        if (!mat.HasProperty(aspectRatioID) ||
-                            !TryEstimateAspectRatio(mesh, i, matrix, out var aspectRatio) ||
-                            Mathf.Approximately(mat.GetFloat(aspectRatioID), aspectRatio)) {
+                        var properties = getProperties(mr, i);
+                        if (!TryGetPropertyKey(mat, properties, out var propertyKey) ||
+                            ArePropertiesEqual(mat, properties)) {
                             materialsRequireAliasing.Add(mat);
                             continue;
                         }
-                        if (sourceList == null && !materialSourceMap.TryGetValue((mat, aspectRatio), out sourceList)) {
-                            sourceList = ListPool<(MeshRenderer, int)>.Get();
-                            materialSourceMap.Add((mat, aspectRatio), sourceList);
+                        if (!materialSourceMap.TryGetValue((mat, propertyKey), out var sourceList)) {
+                            sourceList = ListPool<(Renderer, int)>.Get();
+                            materialSourceMap.Add((mat, propertyKey), sourceList);
                         }
                         sourceList.Add((mr, i));
                     }
                 }
                 foreach (var kv in materialSourceMap) {
-                    var (mat, aspectRatio) = kv.Key;
-                    if (!materialAspectMap.TryGetValue(kv.Key, out var newMat)) {
+                    var mat = kv.Key.Item1;
+                    if (!materialPropertyMap.TryGetValue(kv.Key, out var newMat)) {
                         var assetPath = AssetDatabase.GetAssetPath(mat);
-                        if (materialsRequireAliasing.Add(mat) && !string.IsNullOrEmpty(assetPath) && !assetPath.StartsWith("Packages/")) {
+                        var properties = kv.Value.Count > 0 ? getProperties(kv.Value[0].Item1, kv.Value[0].Item2) : null;
+                        var excludePropertyIds = GetPropertyIds(properties);
+                        bool canModify = materialsRequireAliasing.Add(mat) && MaterialUtil.IsMaterialSafeToModify(mat);
+                        if (canModify) {
                             newMat = mat;
-                            Undo.RecordObject(newMat, "Fixup Aspect Ratio in Material");
-                        } else {
-                            newMat = new Material(mat);
-                            var shader = mat.shader;
-                            int propertyCount = shader.GetPropertyCount();
-                            var parentMat = mat;
-                            do {
-                                bool hasOtherPropertyChanged = false;
-                                for (int i = 0; i < propertyCount; i++) {
-                                    int id = shader.GetPropertyNameId(i);
-                                    if (id != aspectRatioID &&
-                                        parentMat.IsPropertyOverriden(id)) {
-                                        hasOtherPropertyChanged = true;
-                                        break;
-                                    }
-                                }
-                                if (hasOtherPropertyChanged) {
-                                    newMat.parent = parentMat;
-                                    break;
-                                }
-                                parentMat = parentMat.parent;
-                            } while (parentMat != null);
-                            generatedMaterials.Add((assetPath, newMat, aspectRatio));
-                        }
-                        newMat.SetFloat(aspectRatioID, aspectRatio);
-                        materialAspectMap.Add(kv.Key, newMat);
+                            Undo.RecordObject(newMat, undoName);
+                        } else
+                            newMat = MaterialUtil.CreateGeneratedAlias(mat, excludePropertyIds);
+                        SetProperties(newMat, properties);
+                        if (!canModify && getGeneratedMaterialPostfix != null)
+                            generatedMaterials.Add((assetPath, newMat, properties));
+                        materialPropertyMap.Add(kv.Key, newMat);
                     }
                     foreach (var (mr, index) in kv.Value) {
                         var sharedMaterials = mr.sharedMaterials;
+                        if (sharedMaterials[index] == newMat) continue;
+                        materialListChanged = true;
                         sharedMaterials[index] = newMat;
-                        Undo.RecordObject(mr, "Fixup Aspect Ratio in Material");
+                        Undo.RecordObject(mr, undoName);
                         mr.sharedMaterials = sharedMaterials;
                         if (PrefabUtility.IsPartOfPrefabInstance(mr))
                             PrefabUtility.RecordPrefabInstancePropertyModifications(mr);
                     }
-                    ListPool<(MeshRenderer, int)>.Release(kv.Value);
+                    ListPool<(Renderer, int)>.Release(kv.Value);
                 }
-                bool hasValidatedFolder = false;
-                foreach (var (assetPath, mat, aspectRatio) in generatedMaterials) {
-                    string path;
-                    string postfix = $"_Adjusted_{HumanizeAspectRatio(aspectRatio)}";
-                    if (!string.IsNullOrEmpty(assetPath) && !assetPath.StartsWith("Packages/"))
-                        path = assetPath.Insert(assetPath.LastIndexOf('.'), postfix);
-                    else {
-                        if (!hasValidatedFolder) {
-                            hasValidatedFolder = true;
-                            if (!AssetDatabase.IsValidFolder(directory))
-                                AssetDatabase.CreateFolder("Assets", "VizVid_Generated");
-                        }
-                        path = $"{directory}{mat.name}{postfix}.mat";
-                    }
-                    AssetDatabase.CreateAsset(mat, AssetDatabase.GenerateUniqueAssetPath(path));
+                foreach (var (assetPath, mat, properties) in generatedMaterials)
+                    MaterialUtil.SaveMaterialAsAsset(mat, assetPath, getGeneratedMaterialPostfix(properties), false);
+                return materialListChanged;
+            }
+        }
+
+        static string GetDefaultGeneratedMaterialPostfix(MaterialPropertyOverride[] properties) => "_Adjusted";
+
+        static bool TryGetPropertyKey(Material material, MaterialPropertyOverride[] properties, out MaterialPropertyKey key) {
+            if (properties == null) {
+                key = default;
+                return false;
+            }
+            foreach (var property in properties)
+                if (property.propertyId == 0 || !material.HasProperty(property.propertyId)) {
+                    key = default;
+                    return false;
+                }
+            key = new MaterialPropertyKey(properties);
+            return true;
+        }
+
+        static int SafeGetInteger(Material material, int propertyId) {
+            var shader = material.shader;
+            if (shader == null) return 0;
+            int propertyIndex = FindPropertyIndex(shader, propertyId);
+            if (propertyIndex < 0) {
+                if (material.HasInteger(propertyId)) return material.GetInteger(propertyId);
+                if (material.HasFloat(propertyId)) return Mathf.RoundToInt(material.GetFloat(propertyId));
+                return 0;
+            }
+            return shader.GetPropertyType(propertyIndex) switch {
+                ShaderPropertyType.Float or ShaderPropertyType.Range => Mathf.RoundToInt(material.GetFloat(propertyId)),
+                ShaderPropertyType.Int => material.GetInteger(propertyId),
+                _ => 0,
+            };
+        }
+
+        static void SafeSetInteger(Material material, int propertyId, int value) {
+            var shader = material.shader;
+            if (shader == null) return;
+            int propertyIndex = FindPropertyIndex(shader, propertyId);
+            if (propertyIndex < 0) {
+                material.SetInteger(propertyId, value);
+                return;
+            }
+            switch (shader.GetPropertyType(propertyIndex)) {
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    material.SetFloat(propertyId, value);
+                    break;
+                case ShaderPropertyType.Int:
+                    material.SetInteger(propertyId, value);
+                    break;
+                case ShaderPropertyType.Color:
+                case ShaderPropertyType.Vector:
+                    material.SetVector(propertyId, Vector4.one * value);
+                    break;
+            }
+        }
+
+        static int FindPropertyIndex(Shader shader, int propertyId) {
+            if (shader == null) return -1;
+            for (int i = 0, count = shader.GetPropertyCount(); i < count; i++)
+                if (shader.GetPropertyNameId(i) == propertyId)
+                    return i;
+            return -1;
+        }
+
+        static float SafeGetFloat(Material material, int propertyId) {
+            var shader = material.shader;
+            if (shader == null) return 0f;
+            int propertyIndex = FindPropertyIndex(shader, propertyId);
+            if (propertyIndex < 0) {
+                if (material.HasFloat(propertyId)) return material.GetFloat(propertyId);
+                if (material.HasInteger(propertyId)) return material.GetInteger(propertyId);
+                return 0F;
+            }
+            return shader.GetPropertyType(propertyIndex) switch {
+                ShaderPropertyType.Float or ShaderPropertyType.Range => material.GetFloat(propertyId),
+                ShaderPropertyType.Int => material.GetInteger(propertyId),
+                _ => 0f,
+            };
+        }
+
+        static void SafeSetFloat(Material material, int propertyId, float value) {
+            var shader = material.shader;
+            if (shader == null) return;
+            int propertyIndex = FindPropertyIndex(shader, propertyId);
+            if (propertyIndex < 0) {
+                material.SetFloat(propertyId, value);
+                return;
+            }
+            switch (shader.GetPropertyType(propertyIndex)) {
+                case ShaderPropertyType.Float:
+                case ShaderPropertyType.Range:
+                    material.SetFloat(propertyId, value);
+                    break;
+                case ShaderPropertyType.Int:
+                    material.SetInteger(propertyId, Mathf.RoundToInt(value));
+                    break;
+                case ShaderPropertyType.Color:
+                case ShaderPropertyType.Vector:
+                    material.SetVector(propertyId, Vector4.one * value);
+                    break;
+            }
+        }
+
+        static bool ArePropertiesEqual(Material material, MaterialPropertyOverride[] properties) {
+            foreach (var property in properties) {
+                switch (property.propertyType) {
+                    case ShaderPropertyType.Float:
+                    case ShaderPropertyType.Range:
+                        if (property.value is not float value || !Mathf.Approximately(SafeGetFloat(material, property.propertyId), value)) return false;
+                        break;
+                    case ShaderPropertyType.Int:
+                        if (property.value is not int intValue || SafeGetInteger(material, property.propertyId) != intValue) return false;
+                        break;
+                    case ShaderPropertyType.Color:
+                        if (property.value is not Color color || material.GetColor(property.propertyId) != color) return false;
+                        break;
+                    case ShaderPropertyType.Vector:
+                        if (property.value is not Vector4 vector || material.GetVector(property.propertyId) != vector) return false;
+                        break;
+                    case ShaderPropertyType.Texture:
+                        if (property.value is not Texture && property.value != null) return false;
+                        if (material.GetTexture(property.propertyId) != (Texture)property.value) return false;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        static int[] GetPropertyIds(MaterialPropertyOverride[] properties) {
+            if (properties == null) return null;
+            var ids = new int[properties.Length];
+            for (int i = 0; i < properties.Length; i++)
+                ids[i] = properties[i].propertyId;
+            return ids;
+        }
+
+        static void SetProperties(Material material, MaterialPropertyOverride[] properties) {
+            foreach (var property in properties) {
+                switch (property.propertyType) {
+                    case ShaderPropertyType.Float:
+                    case ShaderPropertyType.Range:
+                        SafeSetFloat(material, property.propertyId, (float)property.value);
+                        break;
+                    case ShaderPropertyType.Int:
+                        SafeSetInteger(material, property.propertyId, (int)property.value);
+                        break;
+                    case ShaderPropertyType.Color:
+                        material.SetColor(property.propertyId, (Color)property.value);
+                        break;
+                    case ShaderPropertyType.Vector:
+                        material.SetVector(property.propertyId, (Vector4)property.value);
+                        break;
+                    case ShaderPropertyType.Texture:
+                        material.SetTexture(property.propertyId, property.value as Texture);
+                        break;
                 }
             }
         }
 
         public static bool TryEstimateAspectRatio(Mesh mesh, int subMeshIndex, Matrix4x4 objectToWorld, out float aspectRatio) {
-            if (mesh == null || subMeshIndex < 0 || subMeshIndex >= mesh.subMeshCount) {
+            if (mesh == null || subMeshIndex >= mesh.subMeshCount) {
                 aspectRatio = 1;
                 return false;
             }
             using var meshDatas = Mesh.AcquireReadOnlyMeshData(mesh);
-            using var job = AspectRatioFinder.Create(meshDatas[0], subMeshIndex, objectToWorld, out var length);
-            job.Schedule(length, 64).Complete();
-            return job.TryGetResult(out aspectRatio);
+            using var job = ScreenEstimator.Create(meshDatas[0], subMeshIndex, objectToWorld, out var count);
+            job.Schedule(count, 64).Complete();
+            if (!job.TryGetResult(out _, out var v, out var u, out _, out _)) {
+                aspectRatio = 1;
+                return false;
+            }
+            aspectRatio = sqrt(lengthsq(u) / lengthsq(v));
+            return true;
+        }
+
+        public static bool TryEstimatePlacement(
+            Mesh mesh, int subMeshIndex, Matrix4x4 objectToWorld,
+            out Vector3 position, out Quaternion rotation, out Vector3 scale
+        ) {
+            if (mesh == null || subMeshIndex >= mesh.subMeshCount) {
+                position = Vector3.zero;
+                rotation = Quaternion.identity;
+                scale = Vector3.one;
+                return false;
+            }
+            using var meshDatas = Mesh.AcquireReadOnlyMeshData(mesh);
+            using var job = ScreenEstimator.Create(meshDatas[0], subMeshIndex, objectToWorld, out var count);
+            job.Schedule(count, 64).Complete();
+            if (!job.TryGetResult(out var c, out var v, out var u, out _, out _)) {
+                position = Vector3.zero;
+                rotation = Quaternion.identity;
+                scale = Vector3.one;
+                return false;
+            }
+            position = c;
+            rotation = LookRotationSafe(cross(v, u), v);
+            scale = sqrt(float3(lengthsq(u), lengthsq(v), 1));
+            return true;
         }
 
         static string HumanizeAspectRatio(float aspectRatio) {
@@ -165,33 +424,31 @@ namespace JLChnToZ.VRC.VVMW.Designer {
         }
 
         [BurstCompile]
-        struct AspectRatioFinder : IJobParallelFor, IDisposable {
+        struct ScreenEstimator : IJobParallelFor, IDisposable {
             [ReadOnly] float4x4 objectToWorld;
             [ReadOnly] NativeArray<float3> vertices;
             [ReadOnly] NativeArray<float2> uvs;
             [ReadOnly] NativeSlice<ushort> indices;
-            [WriteOnly] NativeArray<float2> results;
+            [WriteOnly] NativeArray<Fragment> frags;
+            [WriteOnly] NativeArray<float4> uvRanges;
 
-            public static AspectRatioFinder Create(Mesh.MeshData meshData, int subMeshIndex, Matrix4x4 objectToWorld, out int length) {
-                var subMesh = meshData.GetSubMesh(subMeshIndex);
-                var vc = meshData.vertexCount;
-                var vertices = new NativeArray<Vector3>(vc, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-                var uvs = new NativeArray<Vector2>(vc, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            public static ScreenEstimator Create(Mesh.MeshData meshData, int subMeshIndex, Matrix4x4 objectToWorld, out int resultCount) {
+                var vertexCount = meshData.vertexCount;
+                ScreenEstimator instance;
                 var indices = meshData.GetIndexData<ushort>();
-                meshData.GetVertices(vertices);
-                meshData.GetUVs(0, uvs);
-                length = subMesh.indexCount / 3;
-                return new AspectRatioFinder {
-                    indices = indices.Slice(subMesh.indexStart, subMesh.indexCount),
-                    vertices = vertices.Reinterpret<float3>(),
-                    uvs = uvs.Reinterpret<float2>(),
-                    results = new NativeArray<float2>(length, Allocator.TempJob, NativeArrayOptions.UninitializedMemory),
-                    objectToWorld = objectToWorld,
-                };
+                if (subMeshIndex < 0) {
+                    instance = new ScreenEstimator(objectToWorld, vertexCount, indices, out resultCount);
+                } else {
+                    var subMesh = meshData.GetSubMesh(subMeshIndex);
+                    instance = new ScreenEstimator(objectToWorld, vertexCount, indices.Slice(subMesh.indexStart, subMesh.indexCount), out resultCount);
+                }
+                meshData.GetVertices(instance.vertices.Reinterpret<Vector3>());
+                meshData.GetUVs(0, instance.uvs.Reinterpret<Vector2>());
+                return instance;
             }
 
-            static float2 KahanSum(in NativeArray<float2> array) {
-                float2 sum = 0, c = 0;
+            static Fragment KahanSum(in NativeArray<Fragment> array) {
+                Fragment sum = default, c = default;
                 foreach (var v in array) {
                     var y = v - c;
                     var t = sum + y;
@@ -201,40 +458,104 @@ namespace JLChnToZ.VRC.VVMW.Designer {
                 return sum;
             }
 
+            ScreenEstimator(float4x4 objectToWorld, int vertexCount, NativeSlice<ushort> indices, out int resultCount) {
+                this.objectToWorld = objectToWorld;
+                vertices = new NativeArray<float3>(vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                uvs = new NativeArray<float2>(vertexCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                this.indices = indices;
+                resultCount = indices.Length / 3;
+                frags = new NativeArray<Fragment>(resultCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                uvRanges = new NativeArray<float4>(resultCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            }
+
             readonly float3 WorldPos(int index) => mul(objectToWorld, float4(vertices[index], 1)).xyz;
 
             public void Execute(int index) {
+                frags[index] = default;
+                uvRanges[index] = new float4(
+                    float.PositiveInfinity, float.PositiveInfinity,
+                    float.NegativeInfinity, float.NegativeInfinity
+                );
                 int i = index * 3;
-                results[index] = 0;
                 if (i + 2 >= indices.Length) return;
                 ushort i1 = indices[i++], i2 = indices[i++], i3 = indices[i];
                 float3 p0 = WorldPos(i1), p1 = WorldPos(i2), p2 = WorldPos(i3);
                 float3 e1 = p1 - p0, e2 = p2 - p0;
                 float w = lengthsq(cross(e1, e2));
-                if (w <= 0) return;
-                float4 duv = float4(uvs[i2], uvs[i3]) - uvs[i1].xyxy;
-                float tt = lengthsq(e1 * duv.w - e2 * duv.y);
-                if (tt <= 0) return;
-                float bb = lengthsq(e2 * duv.x - e1 * duv.z);
-                if (bb <= 0) return;
-                results[index] = float2(log2(tt / bb) * w, w);
+                if (!(w > 0)) return;
+                float2 uv0 = uvs[i1], uv1 = uvs[i2], uv2 = uvs[i3];
+                float2 d1 = uv1 - uv0, d2 = uv2 - uv0;
+                float det = d1.x * d2.y - d2.x * d1.y;
+                if (!(abs(det) > 0)) return;
+                float rcp = 1f / det;
+                float3 u = (e1 * d2.y - e2 * d1.y) * rcp;
+                float3 v = (e2 * d1.x - e1 * d2.x) * rcp;
+                if (!(lengthsq(u) > 0) || !(lengthsq(v) > 0)) return;
+                float3 origin = p0 - u * uv0.x - v * uv0.y;
+                frags[index] = new Fragment(origin + (u + v) * 0.5F, v, u) * w;
+                uvRanges[index] = new float4(min(uv0, min(uv1, uv2)), max(uv0, max(uv1, uv2)));
             }
 
-            public readonly bool TryGetResult(out float result) {
-                float2 resultWeights = KahanSum(results);
-                if (resultWeights.y > 0) {
-                    result = exp2(resultWeights.x / resultWeights.y * 0.5f);
-                    return true;
+            public readonly bool TryGetResult(out float3 center, out float3 up, out float3 right, out float2 uvMin, out float2 uvMax) {
+                var s = KahanSum(frags);
+                if (!(s.weight > 0F)) {
+                    center = up = right = float.NaN;
+                    uvMin = 0F;
+                    uvMax = 1F;
+                    return false;
                 }
-                result = float.NaN;
-                return false;
+                float rcp = 1f / s.weight;
+                center = s.center * rcp;
+                up = s.up * rcp;
+                right = s.right * rcp;
+                uvMin = float.PositiveInfinity;
+                uvMax = float.NegativeInfinity;
+                foreach (var uvRange in uvRanges) {
+                    uvMin = min(uvRange.xy, uvMin);
+                    uvMax = max(uvRange.zw, uvMax);
+                }
+                return true;
             }
 
             public void Dispose() {
                 if (vertices.IsCreated) vertices.Dispose();
                 if (uvs.IsCreated) uvs.Dispose();
-                if (results.IsCreated) results.Dispose();
+                if (frags.IsCreated) frags.Dispose();
+                if (uvRanges.IsCreated) uvRanges.Dispose();
             }
+        }
+
+        struct Fragment {
+            public float3 center, up, right;
+            public float weight;
+
+            public Fragment(float3 center, float3 up, float3 right, float weight = 1F) {
+                this.center = center;
+                this.up = up;
+                this.right = right;
+                this.weight = weight;
+            }
+
+            public static Fragment operator *(Fragment a, float w) => new Fragment(
+                a.center * w,
+                a.up * w,
+                a.right * w,
+                a.weight * w
+            );
+
+            public static Fragment operator +(Fragment a, Fragment b) => new Fragment(
+                a.center + b.center,
+                a.up + b.up,
+                a.right + b.right,
+                a.weight + b.weight
+            );
+
+            public static Fragment operator -(Fragment a, Fragment b) => new Fragment(
+                a.center - b.center,
+                a.up - b.up,
+                a.right - b.right,
+                a.weight - b.weight
+            );
         }
     }
 }
