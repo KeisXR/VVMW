@@ -40,6 +40,8 @@ namespace JLChnToZ.VRC.VVMW {
         VRCPlayerApi performer;
         DateTime lastSyncNetworkTime;
         double lastHealthCheckTime;
+        // The start time in seconds that the URL being loaded asks for, or -1 if none.
+        float urlStartTime = -1;
 
         /// <summary>
         /// The current time of the video in seconds.
@@ -477,6 +479,85 @@ namespace JLChnToZ.VRC.VVMW {
             if (!Networking.IsOwner(gameObject) || !synced) return;
             if ((Networking.GetNetworkDateTime() - lastSyncNetworkTime).Ticks < OWNER_SYNC_COOLDOWN_TICKS) return;
             RequestSerialization();
+        }
+
+        /// <summary>
+        /// Read the start time a YouTube link asks for, such as <c>?t=90</c>, <c>&amp;t=1m30s</c> or <c>?start=90</c>.
+        /// </summary>
+        /// <param name="mediaUrl">The URL to read.</param>
+        /// <returns>The start time in seconds, or -1 if the URL does not give one.</returns>
+        float GetUrlStartTime(VRCUrl mediaUrl) {
+            if (VRCUrl.IsNullOrEmpty(mediaUrl)) return -1;
+            var url = mediaUrl.Get();
+            if (string.IsNullOrEmpty(url)) return -1;
+            int domainStart = url.IndexOf("://");
+            if (domainStart < 0) return -1;
+            domainStart += 3;
+            int domainEnd = url.IndexOf('/', domainStart);
+            if (domainEnd < 0) domainEnd = url.Length;
+            var domain = url.Substring(domainStart, domainEnd - domainStart);
+            if (!domain.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) &&
+                !domain.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase) &&
+                !domain.EndsWith("youtube-nocookie.com", StringComparison.OrdinalIgnoreCase))
+                return -1;
+            for (int i = domainEnd, length = url.Length; i < length; i++) {
+                char c = url[i];
+                if (c != '?' && c != '&' && c != '#') continue;
+                int valueStart;
+                if (url.IndexOf("t=", i + 1) == i + 1) valueStart = i + 3;
+                else if (url.IndexOf("start=", i + 1) == i + 1) valueStart = i + 7;
+                else continue;
+                int valueEnd = valueStart;
+                while (valueEnd < length && url[valueEnd] != '&' && url[valueEnd] != '#') valueEnd++;
+                float startTime = ParseUrlTime(url, valueStart, valueEnd);
+                if (startTime >= 0) return startTime;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// Parse a YouTube time value, such as <c>90</c>, <c>90s</c> or <c>1h2m3s</c>.
+        /// </summary>
+        /// <returns>The time in seconds, or -1 if the value is not a time.</returns>
+        float ParseUrlTime(string url, int start, int end) {
+            if (start >= end) return -1;
+            // The total is a float so that an absurd value such as 999999h cannot overflow.
+            float total = 0;
+            int number = 0;
+            bool hasNumber = false;
+            for (int i = start; i < end; i++) {
+                char c = url[i];
+                if (c >= '0' && c <= '9') {
+                    number = number * 10 + c - '0';
+                    // A value this long is not a time; also keeps the number itself from overflowing.
+                    if (number > 1000000) return -1;
+                    hasNumber = true;
+                    continue;
+                }
+                if (!hasNumber) return -1;
+                if (c == 'h' || c == 'H') total += number * 3600F;
+                else if (c == 'm' || c == 'M') total += number * 60F;
+                else if (c == 's' || c == 'S') total += number;
+                else return -1;
+                number = 0;
+                hasNumber = false;
+            }
+            // A number without a unit is in seconds.
+            if (hasNumber) total += number;
+            return total;
+        }
+
+        /// <summary>
+        /// Take the start time the loaded URL asked for, so it is applied only once.
+        /// </summary>
+        /// <returns>The start time in seconds, or 0 if there is none or it is outside the video.</returns>
+        float TakeUrlStartTime() {
+            float startTime = urlStartTime;
+            urlStartTime = -1;
+            if (startTime <= 0 || !Utilities.IsValid(activeHandler)) return 0;
+            var duration = activeHandler.Duration;
+            if (duration <= 0 || float.IsInfinity(duration) || startTime >= duration) return 0;
+            return startTime;
         }
 
         void SyncSpeed() {

@@ -348,6 +348,8 @@ namespace JLChnToZ.VRC.VVMW {
             }
             BumpLocalPlaySession();
             time = 0;
+            urlStartTime = GetUrlStartTime(localUrl);
+            if (urlStartTime < 0) urlStartTime = GetUrlStartTime(altUrl);
             ResetLyricsOffset(true);
             SetRangeInternal(-1, -1);
             ActivePlayer = playerType;
@@ -594,10 +596,12 @@ namespace JLChnToZ.VRC.VVMW {
             float videoTime = 0;
             if (isLocalReloading) videoTime = CalcVideoTime();
             isLocalReloading = false;
+            float startTime = TakeUrlStartTime();
             activeHandler.Loop = loop;
             SendEvent("_onVideoReady");
             if (!synced) {
                 activeHandler.Play();
+                if (startTime > 0) Time = startTime;
                 StartLyricsLineUpdate();
                 return;
             }
@@ -614,6 +618,8 @@ namespace JLChnToZ.VRC.VVMW {
                 case PAUSED: activeHandler.Pause(); break;
                 default: return;
             }
+            // Others follow the owner's time, so only the owner seeks to the URL's start time.
+            if (videoTime <= 0 && Networking.IsOwner(gameObject)) videoTime = startTime;
             if (videoTime > 0) Time = videoTime;
             if (intState == PLAYING || activeHandler.IsPlaying) StartSyncTime();
             StartLyricsLineUpdate();
@@ -790,6 +796,8 @@ namespace JLChnToZ.VRC.VVMW {
                 lastError = VideoError.Unknown;
                 isError = false;
                 trustUpdated = false;
+                // The owner's synced time decides where this video starts.
+                urlStartTime = -1;
                 ResetLyricsOffset(true);
                 activeHandler.LoadUrl(url, false);
                 _VideoBeginLoad();
